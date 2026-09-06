@@ -1,0 +1,4 @@
+.build/
+dist/
+assets/sfmap.iconset/
+.DS_Store

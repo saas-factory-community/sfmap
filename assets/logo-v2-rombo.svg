@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    sfmap — el logo, v2.
+
+    POR QUÉ NO EL DE ANTES. Tres nodos con flechas era correcto y aburrido: la
+    misma silueta cuadrada que ya tienen media docena de iconos, y el símbolo
+    de "diagrama" es el más genérico que existe. Un icono no tiene que explicar,
+    tiene que RECONOCERSE de reojo entre veinte.
+
+    ESTE es un PLANO en perspectiva — un rombo — con una ruta que lo cruza y un
+    punto que marca el destino. La silueta es un rombo, que en el Dock de Daniel
+    no la tiene nadie: todo lo demás son cuadros, círculos o letras. Se
+    distingue por FORMA antes de que el ojo llegue al detalle, que es lo único
+    que importa a 32 px y a media pantalla de distancia.
+
+    El terreno es morado (la materia, lo que hay), la ruta es oro (la relación,
+    por dónde va) — la misma repartición que usa el lienzo y que ya hablan sus
+    diagramas.
+  -->
+  <defs>
+    <linearGradient id="teja" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#191622"/>
+      <stop offset="1" stop-color="#0a0910"/>
+    </linearGradient>
+    <linearGradient id="plano" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0"   stop-color="#a95cff"/>
+      <stop offset="0.55" stop-color="#8C27F1"/>
+      <stop offset="1"   stop-color="#5f14ad"/>
+    </linearGradient>
+    <filter id="bMorado" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="30" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bOro" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="16" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="dentro">
+      <path d="M512 236 L836 512 L512 788 L188 512 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" ry="228" fill="url(#teja)"/>
+  <rect x="4" y="4" width="1016" height="1016" rx="226" ry="226"
+        fill="none" stroke="#ffffff" stroke-opacity=".07" stroke-width="8"/>
+
+  <g filter="url(#bMorado)">
+    <!-- EL PLANO. Un rombo achatado: la proyección de un lienzo visto de canto. -->
+    <path d="M512 236 L836 512 L512 788 L188 512 Z"
+          fill="url(#plano)" fill-opacity=".16"
+          stroke="#a95cff" stroke-width="26" stroke-linejoin="round"/>
+    <!-- La retícula del lienzo, recortada al plano: dice que es una SUPERFICIE
+         de trabajo, no un rombo decorativo. -->
+    <g clip-path="url(#dentro)" stroke="#a95cff" stroke-opacity=".34" stroke-width="9">
+      <path d="M350 374 L674 650"/>
+      <path d="M674 374 L350 650"/>
+    </g>
+  </g>
+
+  <!-- LA RUTA. Cruza el plano siguiendo su perspectiva y termina en el destino. -->
+  <g filter="url(#bOro)" fill="none" stroke="#ff9101"
+     stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 546 L446 448 L560 606 L714 460"/>
+  </g>
+  <circle cx="714" cy="460" r="44" fill="#0a0910" stroke="#ff9101" stroke-width="28" filter="url(#bOro)"/>
+</svg>

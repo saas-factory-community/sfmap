@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    sfmap — el logo, v3 (24 ago 2026, pedido de Daniel: "el de antes no le hace
+    referencia").
+
+    EL RETRATO DE LA APP, no un símbolo genérico: DOS CAJAS y un CODO ORTOGONAL
+    con flecha — que es exactamente lo que sfmap dibuja y lo único que ninguna
+    otra app del Dock dibuja igual (el ruteo ortogonal es la firma del lienzo).
+    Es el mismo glifo que ya identifica a cada página en el panel lateral
+    (Icono.lienzo): el icono del Dock y el icono de la lista dicen LO MISMO.
+
+    Colores de marca intactos: teja de titanio oscuro, caja de partida en
+    titanio claro, caja de destino en morado #8C27F1, la ruta en oro #ff9101.
+    La retícula de puntos del fondo es el lienzo mismo.
+  -->
+  <defs>
+    <linearGradient id="teja" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d1927"/>
+      <stop offset="0.12" stop-color="#141020"/>
+      <stop offset="1" stop-color="#0a0910"/>
+    </linearGradient>
+    <linearGradient id="titanio" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f7f9"/>
+      <stop offset="0.55" stop-color="#cfcfd8"/>
+      <stop offset="1" stop-color="#9fa0ac"/>
+    </linearGradient>
+    <linearGradient id="morado" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b06dff"/>
+      <stop offset="0.5" stop-color="#8C27F1"/>
+      <stop offset="1" stop-color="#5f14ad"/>
+    </linearGradient>
+    <filter id="bOro" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="bMorado" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="26" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="puntos" width="88" height="88" patternUnits="userSpaceOnUse">
+      <circle cx="44" cy="44" r="5" fill="#ffffff" fill-opacity="0.055"/>
+    </pattern>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" ry="228" fill="url(#teja)"/>
+  <rect width="1024" height="1024" rx="228" ry="228" fill="url(#puntos)"/>
+  <!-- El filo de luz del bisel, arriba: la misma física del cromo de la app. -->
+  <rect x="4" y="4" width="1016" height="1016" rx="226" ry="226"
+        fill="none" stroke="#ffffff" stroke-opacity=".07" stroke-width="8"/>
+  <path d="M232 34 C 420 22 604 22 792 34" fill="none" stroke="#ffffff"
+        stroke-opacity=".18" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- CAJA DE PARTIDA: titanio claro, arriba-izquierda, con su sombra de corte. -->
+  <g>
+    <rect x="168" y="204" width="330" height="222" rx="52"
+          fill="#000000" fill-opacity="0.5" transform="translate(0,14)"/>
+    <rect x="168" y="204" width="330" height="222" rx="52" fill="url(#titanio)"/>
+    <rect x="176" y="212" width="314" height="206" rx="46"
+          fill="none" stroke="#ffffff" stroke-opacity=".65" stroke-width="6"/>
+  </g>
+
+  <!-- CAJA DE DESTINO: morada, abajo-derecha, con halo de marca. -->
+  <g filter="url(#bMorado)">
+    <rect x="530" y="600" width="330" height="222" rx="52"
+          fill="#000000" fill-opacity="0.5" transform="translate(0,14)"/>
+    <rect x="530" y="600" width="330" height="222" rx="52" fill="url(#morado)"/>
+    <rect x="538" y="608" width="314" height="206" rx="46"
+          fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="6"/>
+  </g>
+
+  <!-- LA RUTA ORTOGONAL, en oro: sale de la caja de partida por abajo, dobla
+       el codo y ENTRA a la morada por la izquierda, con su flecha. -->
+  <g filter="url(#bOro)" fill="none" stroke="#ff9101"
+     stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M333 426 L333 711 L500 711"/>
+    <path d="M448 656 L510 711 L448 766"/>
+  </g>
+  <!-- El puerto de salida: el punto por donde nace la flecha, como en la app. -->
+  <circle cx="333" cy="426" r="26" fill="#0a0910" stroke="#ff9101" stroke-width="16"/>
+</svg>
