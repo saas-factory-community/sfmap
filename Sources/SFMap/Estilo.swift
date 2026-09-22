@@ -430,6 +430,7 @@ private extension NSColor {
 
 /// Un botón plano con hover, del tamaño y el radio de la casa.
 final class BotonPlano: NSButton {
+    var plano = false { didSet { repintar() } }
     var tema: Tema = .claro { didSet { repintar() } }
     var activo = false { didSet { repintar() } }
     /**
@@ -507,7 +508,7 @@ final class BotonPlano: NSButton {
         set {
             iconoBase = newValue
             super.image = newValue.map {
-                Estilo.iconoBisel($0, tema, tinte: tinteIcono ?? (activo ? tema.acento : nil))
+                plano ? $0 : Estilo.iconoBisel($0, tema, tinte: tinteIcono ?? (activo ? tema.acento : nil))
             }
         }
     }
@@ -576,7 +577,13 @@ final class BotonPlano: NSButton {
     override func draw(_ r: NSRect) {
         if let c = NSGraphicsContext.current?.cgContext {
             if activo {
-                Estilo.pintarBisel(self, tema, radio: Estilo.radioChico, pozo: true, borde: false)
+                if plano {
+                    c.setFillColor(Estilo.hover(tema).cgColor)
+                    c.addPath(CGPath(roundedRect: bounds, cornerWidth: 5, cornerHeight: 5, transform: nil))
+                    c.fillPath()
+                } else {
+                    Estilo.pintarBisel(self, tema, radio: Estilo.radioChico, pozo: true, borde: false)
+                }
                 if enfasis == .solido {
                     c.setFillColor(tema.acento.cgColor)
                     let alto = bounds.height - 12
@@ -713,7 +720,7 @@ final class BotonPlano: NSButton {
         contentTintColor = activo ? tema.acento : tema.cuerpoTexto
         // El glifo biselado se re-cuece cuando cambian tema/activo/tinte.
         if let base = iconoBase {
-            super.image = Estilo.iconoBisel(base, tema, tinte: tinteIcono ?? (activo ? tema.acento : nil))
+            super.image = plano ? base : Estilo.iconoBisel(base, tema, tinte: tinteIcono ?? (activo ? tema.acento : nil))
         }
         needsDisplay = true
         guard !tituloPropio.isEmpty else { return }
@@ -892,6 +899,26 @@ private func c2(_ h: String) -> NSColor { NSColor(hex: h) ?? .gray }
 
 
 extension NSCursor {
+    static let redimensionNWSE = cursorDiagonal(ascendente: false)
+    static let redimensionNESW = cursorDiagonal(ascendente: true)
+
+    private static func cursorDiagonal(ascendente: Bool) -> NSCursor {
+        let imagen = NSImage(size: NSSize(width: 24, height: 24), flipped: false) { _ in
+            let p = NSBezierPath()
+            func punto(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+                NSPoint(x:x, y:ascendente ? y : 24-y)
+            }
+            p.move(to:punto(5,5)); p.line(to:punto(19,19))
+            p.move(to:punto(5,11)); p.line(to:punto(5,5)); p.line(to:punto(11,5))
+            p.move(to:punto(13,19)); p.line(to:punto(19,19)); p.line(to:punto(19,13))
+            p.lineJoinStyle = .round; p.lineCapStyle = .round
+            NSColor.white.setStroke(); p.lineWidth = 4; p.stroke()
+            NSColor.black.setStroke(); p.lineWidth = 2; p.stroke()
+            return true
+        }
+        return NSCursor(image:imagen, hotSpot:NSPoint(x:12,y:12))
+    }
+
     /// EL CURSOR DE GIRO. macOS no publica ninguno, asi que se dibuja: sin una
     /// señal en el puntero, la zona de rotacion de las esquinas es invisible
     /// hasta que ya estas girando algo sin querer.

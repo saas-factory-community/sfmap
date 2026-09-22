@@ -37,10 +37,18 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
      */
     let panelDoc = PanelDoc(frame: .zero)
     var docAbierto = false
+    private var ultimoEstadoHTML: Data?
+    private var arranqueCompleto = false
+    private var embedHTML: EmbedHTML?
     var anchoDoc: CGFloat = {
+        // Abre ANCHO por default (Daniel, 6 sep 2026: «aumenta el ancho al abrir files»): una tabla
+        // de cinco columnas no cabe en 470. Un valor guardado por debajo de 600 es del default viejo
+        // y se ignora; uno mayor es de su mano y se respeta.
         let g = UserDefaults.standard.double(forKey: "sfmap.anchoDoc")
-        return g > 0 ? min(760, max(320, CGFloat(g))) : 470
+        return g >= 600 ? min(1100, CGFloat(g)) : 820
     }()
+    var ajustes: NSPopover?
+    var importando = false
     var hoja: NSView?
     var regiones: [Compilador.Region] = []
 
@@ -81,6 +89,10 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// La puerta agéntica (Puente.swift): elemento a centrar tras abrir,
     /// última selección escrita y firma del panel para no repintar en vano.
     var centrarPendiente: String?
+    /// Al abrir un lienzo, el panel SIGUE a su espacio. En el arranque sin
+    /// lienzo pedido se apaga: la app abre en la PORTADA (Daniel, 11 sep:
+    /// "abres la app y te manda a los espacios") con el último lienzo detrás.
+    var seguirEspacio = true
     var seleccionEscrita: Set<String>? = nil
     var firmaPanel = ""
 
@@ -231,6 +243,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if CommandLine.arguments.contains("--lateral") { alternarLateral() }
         if let p = Nube.problema {
             decir("⚠︎ \(p)", error: true)
+            arranqueCompleto = true
         } else {
             Task { await self.cargarLista() }
         }
@@ -248,7 +261,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
          * todo sigue igual es trabajo por nada mientras Daniel arrastra.
          */
         Cronista.compartido.alCambiar = { [weak self] in self?.lienzo.needsDisplay = true }
-        Cronista.compartido.encender()
+        if !Nube.esLocal { Cronista.compartido.encender() }
 
         // Escena de verificación, si se pidió. Va DESPUÉS de la carga para que
         // parta de un estado real, no de una ventana a medio montar.
@@ -272,6 +285,14 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panelDoc.isHidden = true
         panelDoc.alCerrar = { [weak self] in self?.cerrarDoc() }
         panelDoc.alAbrirLiga = { [weak self] liga in self?.irA(liga) }
+        panelDoc.alCambiarAncho = { [weak self] xVentana in
+            guard let self, let raiz = self.ventana?.contentView else { return }
+            self.anchoDoc = self.panelDoc.esHTML
+                ? PanelDoc.anchoHTML(raiz.bounds.width - xVentana, raiz: raiz.bounds.width)
+                : PanelDoc.anchoDesde(xVentana: xVentana, anchoRaiz: raiz.bounds.width, escalaUI: self.escalaUI)
+            UserDefaults.standard.set(Double(self.anchoDoc), forKey: self.panelDoc.esHTML ? "sfmap.anchoHTML" : "sfmap.anchoDoc")
+            self.colocar(raiz)
+        }
         raiz.addSubview(panelDoc)
 
         /*
@@ -323,12 +344,18 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
          * lienzo abierto: es de donde la mano cree que parte.
          */
         func carpetaCursor() -> String? {
-            self.lateral.foco ?? self.paginas.first { $0.id == self.actual?.id }?.folderId
+            if let f = self.lateral.foco { return f }
+            // La carpeta del lienzo abierto solo cuenta si está DENTRO del
+            // espacio que se ve; si no, se parte de la raíz del espacio.
+            let deActual = self.paginas.first { $0.id == self.actual?.id }?.folderId
+            if Lateral.raizDe(self.carpetas, carpeta: deActual) == self.lateral.espacio, deActual != nil { return deActual }
+            return self.lateral.espacio
         }
 
         lienzo.alCarpetaVecina = { [weak self] paso in
             guard let self,
-                  let id = Lateral.carpetaVecina(self.carpetas, de: carpetaCursor(), paso: paso)
+                  let id = Lateral.carpetaVecina(self.lateral.carpetasVisibles, raiz: self.lateral.espacio,
+                                                 de: carpetaCursor(), paso: paso)
             else { return }
             // El panel se enseña y la carpeta se despliega: mover el cursor a
             // una carpeta plegada dejaria la tecla sin nada observable, que es
@@ -378,6 +405,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
             Task { await self.abrir(v[j].id) }
         }
 
+        lateral.alElegirEspacio = { [weak self] id in self?.irAEspacio(id) }
         lateral.alCrearPagina = { [weak self] carpeta in self?.crearPagina(en: carpeta) }
         lateral.alCrearCarpeta = { [weak self] madre in self?.crearCarpeta(en: madre) }
         lateral.alAnidarCarpeta = { [weak self] id, madre in self?.anidarCarpeta(id, madre) }
@@ -397,8 +425,10 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         raiz.addSubview(lateral)
 
-        engrane.globo = "Atajos y comandos"
-        engrane.alPulsar = { [weak self] in self?.mostrarAtajos() }
+        engrane.globo = "Ajustes"
+        engrane.target = self
+        engrane.action = #selector(mostrarAjustes)
+        engrane.setAccessibilityLabel("Ajustes")
         raiz.addSubview(engrane)
 
         rail.alElegir = { [weak self] h in self?.lienzo.herramienta = h; self?.ventana.makeFirstResponder(self?.lienzo) }
@@ -441,19 +471,16 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         barra.alAnclaje = { [weak self] fijar in self?.fijarAnclaje(fijar) }
         raiz.addSubview(barra)
 
-        estado.alZoom = { [weak self] f in
-            guard let l = self?.lienzo else { return }
-            l.zoomEn(punto: NSPoint(x: l.bounds.midX, y: l.bounds.midY), factor: f)
-        }
         estado.alZoomA = { [weak self] z in self?.lienzo.zoomA(z) }
         estado.alEncuadrar = { [weak self] in self?.lienzo.encuadrar() }
-        estado.alFondo = { [weak self] f in self?.lienzo.fondo = f; self?.estado.fondo = f }
-        estado.alTema = { [weak self] in self?.alternarTema() }
+        if let f = Fondo(rawValue:UserDefaults.standard.string(forKey:"sfmap.fondo") ?? "") { lienzo.fondo=f;estado.fondo=f }
+        estado.alFondo = { [weak self] f in self?.lienzo.fondo = f; self?.estado.fondo = f;UserDefaults.standard.set(f.rawValue,forKey:"sfmap.fondo") }
+        cambiarDocumentos(DocumentosLienzo.leer())
+        estado.alDocumentos = { [weak self] activos in self?.cambiarDocumentos(activos) }
         lienzo.alEnseñarGrupo = { [weak self] h in self?.rail.abrirGrupoDe(h) }
         lienzo.alTema = { [weak self] in self?.alternarTema() }
         estado.alDeshacer = { [weak self] in self?.lienzo.doc.deshacer(); self?.refrescarBarra() }
         estado.alRehacer = { [weak self] in self?.lienzo.doc.rehacer(); self?.refrescarBarra() }
-        estado.alExportar = { [weak self] sel in self?.exportar(soloSeleccion: sel) }
         raiz.addSubview(estado)
 
         mapa.alIrA = { [weak self] p in
@@ -464,12 +491,14 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         lienzo.alCambiar = { [weak self] persistente in
             guard let s = self else { return }
+            s.actualizarEmbed()
             if persistente { s.marcarSucio() }
             s.mapa.elementos = s.lienzo.doc.elementos
             s.mapa.seleccion = s.lienzo.doc.seleccion
             s.refrescarBotones()
         }
         lienzo.alSeleccionar = { [weak self] in self?.refrescarBarra() }
+        lienzo.alActivarHTML = { [weak self] id in self?.activarEmbed(id) }
         lienzo.alMoverCamara = { [weak self] z in
             guard let s = self else { return }
             s.estado.zoom = z
@@ -511,8 +540,31 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
          * ESCRIBE una coma es una coma —tragarse la tecla dentro del buscador
          * de lienzos sería peor que no tener dial.
          */
+        /*
+         * ⌘+ / ⌘− / ⌘0 CON EL PUNTERO SOBRE EL DOCUMENTO cambian el tamaño de su letra
+         * (6 sep 2026). Fuera del panel siguen siendo el zoom del lienzo: el mismo atajo
+         * hace la misma cosa —acercar— sobre la superficie que la mano está señalando.
+         */
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard let s = self, s.docAbierto, e.modifierFlags.contains(.command),
+                  let k = e.charactersIgnoringModifiers, ["+", "=", "-", "_", "0"].contains(k),
+                  let w = s.ventana else { return e }
+            let p = s.panelDoc.convert(w.mouseLocationOutsideOfEventStream, from: nil)
+            guard s.panelDoc.bounds.contains(p) else { return e }
+            let paso = k == "0" ? 0 : (["+", "="].contains(k) ? 1 : -1)
+            if s.panelDoc.esHTML { s.panelDoc.escalarHTML(paso) }
+            else {
+                PanelDoc.escala = PanelDoc.escalar(PanelDoc.escala, paso)
+                s.panelDoc.refrescarContenido()
+            }
+            return nil
+        }
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let s = self, !e.modifierFlags.contains(.command) else { return e }
+            if e.keyCode == 53, let embed = s.embedHTML, embed.interactivo {
+                embed.escapar { [weak s] in s?.ventana.makeFirstResponder(s?.lienzo) }
+                return nil
+            }
             let k = e.charactersIgnoringModifiers ?? ""
             // Con la sonda puesta se escribe TODA tecla que no lleve ⌘. Si la
             // rueda de la tableta esta mandando algo distinto de lo que
@@ -524,6 +576,9 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard ["[", "]", ",", "."].contains(k) else { return e }
             let foco = s.ventana.firstResponder
             if foco is NSTextView || foco is NSTextField { return e }
+            if let vista = foco as? NSView, s.panelDoc.esHTML,
+               let html = s.panelDoc.html, vista.isDescendant(of: html) { return e }
+            if let vista = foco as? NSView, let embed = s.embedHTML, vista.isDescendant(of: embed) { return e }
             s.lienzo.ajustarGrosor(k == "]" || k == "." ? 1 : -1)
             return nil
         }
@@ -541,6 +596,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         lienzo.goma = g
         rail.goma = g
         lienzo.alTocarLienzo = { [weak self] in
+            self?.embedHTML?.desactivar()
             self?.rail.cerrarDesplegable(); self?.estado.cerrarPanel()
         }
         lienzo.alEscapar = { [weak self] in
@@ -548,6 +604,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         lienzo.alPedirMenu = { [weak self] p, el in self?.menuContextual(p, el) }
         lienzo.alAbrirEnlace = { [weak self] liga in self?.irA(liga) }
+        lienzo.alInspeccionar = { [weak self] el in self?.abrirFicha(el) }
         lienzo.alCerrarTarea = { [weak self] id in
             Task { @MainActor in
                 if let err = await LecturaTodoist.cerrar(id) {
@@ -573,6 +630,10 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func colocar(_ raiz: NSView) {
         let a = Estilo.aire
         let esc = escalaUI
+        if docAbierto && panelDoc.esHTML { anchoDoc = PanelDoc.anchoHTML(anchoDoc, raiz: raiz.bounds.width) }
+        // El HTML ocupa una división fija: el lienzo calcula su cámara con el
+        // espacio realmente visible, no con un área escondida bajo WebKit.
+        lienzo.frame = NSRect(x: 0, y: 0, width: max(0, raiz.bounds.width - (docAbierto ? anchoDoc : 0)), height: raiz.bounds.height)
         // El ancho VISUAL del panel: el lógico (arrastrable) por la escala UI.
         let anchoPanel = anchoLateral * esc
         /*
@@ -651,7 +712,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         mapa.frame.size = NSSize(width: mapaNatural.width * esc, height: mapaNatural.height * esc)
         mapa.bounds = NSRect(origin: .zero, size: mapaNatural)
         mapa.frame.origin = NSPoint(x: (lateralAbierta ? anchoPanel : 0) + a, y: a)
-        mapa.isHidden = lateralAbierta && raiz.bounds.width < 1100
+        mapa.isHidden = !PreferenciasLienzo.minimapa() || (lateralAbierta && raiz.bounds.width < 1100)
         mapa.vista = lienzo.bounds.size
         /*
          * ⚠️ LA BARRA DE ESTADO NO SE RECOLOCABA NUNCA, y por eso se salía.
@@ -695,6 +756,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panelDoc.isHidden = !docAbierto
         panelDoc.frame = NSRect(x: raiz.bounds.width - anchoDoc, y: 0,
                                 width: anchoDoc, height: altoPanel)
+        actualizarEmbed()
     }
 
     /// A DÓNDE lleva una liga. Un solo sitio decide, para que ⌘+clic, el clic
@@ -706,6 +768,9 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .pagina(let id):
             guard id != actual?.id else { decir("ya estás en ese lienzo"); return }
             Task { await self.abrir(id) }
+        case .elemento(let id):
+            if lienzo.enfocar(id) { mapa.camara=lienzo.camara; refrescarBarra() }
+            else { decir("⚠︎ no encontré esa zona",error:true) }
         case .video(let u), .web(let u):
             NSWorkspace.shared.open(u)
         case .app(let nombre, let vista):
@@ -739,11 +804,36 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    func cambiarDocumentos(_ activos: Bool) {
+        DocumentosLienzo.guardar(activos)
+        estado.documentosActivos = activos
+        lienzo.documentosActivos = activos
+        if !activos { cerrarDoc() }
+    }
+
     func abrirDoc(_ ruta: String) {
+        guard lienzo.documentosActivos else { return }
+        let eraHTML = panelDoc.esHTML
+        if ArtefactoHTML.esHTML(ruta) && (!eraHTML || !docAbierto), let raiz = ventana?.contentView {
+            let guardado = UserDefaults.standard.double(forKey: "sfmap.anchoHTML")
+            anchoDoc = PanelDoc.anchoHTML(guardado > 0 ? guardado : raiz.bounds.width * 0.56, raiz: raiz.bounds.width)
+        } else if eraHTML && !ArtefactoHTML.esHTML(ruta) {
+            let guardado = UserDefaults.standard.double(forKey: "sfmap.anchoDoc")
+            anchoDoc = guardado >= 600 ? min(1100, guardado) : 820
+        }
         let ok = panelDoc.mostrar(ruta)
         docAbierto = true
         if let raiz = ventana?.contentView { colocar(raiz) }
         decir(ok ? "doc · \(ruta)" : "⚠︎ no encontré \(ruta)", error: !ok)
+    }
+
+    func abrirFicha(_ el: Elemento) {
+        guard lienzo.documentosActivos else { return }
+        docAbierto=true
+        if let raiz=ventana?.contentView { colocar(raiz) }
+        panelDoc.mostrarContenido(FichaSistema.markdown(el,elementos:lienzo.doc.elementos),
+                                 nombre:el.crudo["name"]?.s ?? el.etiqueta ?? "Evidencia y decisión",
+                                 origen:"\(actual?.nombre ?? "Lienzo") · \(el.id)")
     }
 
     func cerrarDoc() {
@@ -870,7 +960,9 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// las escenas para reproducir la secuencia exacta que cerraba el panel.
     func forzarRefrescoBarra() { refrescarBarra() }
 
-    private func refrescarBarra(soloPosicion: Bool = false) {
+    private func refrescarBarra(soloPosicion: Bool = false,
+                                conservarPosicion: Bool = false) {
+        actualizarEmbed()
         let sel = lienzo.doc.seleccionados
         guard !sel.isEmpty else { barra.isHidden = true; barra.cerrarPanel(); refrescarBotones(); return }
         barra.tema = lienzo.tema
@@ -882,7 +974,9 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         barra.acomodarBloqueados = nodos.filter(\.bloqueado).count
         var caja = sel[0].cajaVisual
         for e in sel.dropFirst() { caja = caja.union(e.cajaVisual) }
-        barra.reconstruir(caja: caja, camara: lienzo.camara, viewport: lienzo.bounds.size)
+        barra.reconstruir(caja: caja, camara: lienzo.camara,
+                          viewport: lienzo.bounds.size,
+                          conservarPosicion: conservarPosicion)
         refrescarBotones()
         _ = soloPosicion
     }
@@ -891,7 +985,6 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         mapa.seleccion = lienzo.doc.seleccion
         estado.puedeDeshacer = lienzo.doc.historial.puedeDeshacer
         estado.puedeRehacer = lienzo.doc.historial.puedeRehacer
-        estado.haySeleccion = !lienzo.doc.seleccion.isEmpty
     }
 
     private func editarSeleccion(_ etiqueta: String, _ cuerpo: (inout Elemento) -> Void) {
@@ -899,7 +992,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         lienzo.doc.editar(etiqueta) { els in
             for i in els.indices where ids.contains(els[i].id) { cuerpo(&els[i]) }
         }
-        refrescarBarra()
+        refrescarBarra(conservarPosicion: true)
     }
 
     /// Aplica un parche crudo, opcionalmente acotado a QUÉ elementos.
@@ -919,7 +1012,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 els = Conectores.reruteaTodo(els)
             }
         }
-        refrescarBarra()
+        refrescarBarra(conservarPosicion: true)
     }
 
     /// Fija o suelta el ANCLAJE de un conector.
@@ -943,7 +1036,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             els = Conectores.reruteaTodo(els)
         }
-        refrescarBarra()
+        refrescarBarra(conservarPosicion: true)
     }
 
     private func acomodar() {
@@ -970,6 +1063,14 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
             m.addItem(i)
         }
         if el != nil {
+            if let el, FichaSistema.tiene(el) {
+                item("Ver evidencia y decisión") { [weak self] in self?.abrirFicha(el) }
+                m.addItem(.separator())
+            }
+            if let liga=el?.enlace {
+                item("Abrir destino") { [weak self] in self?.irA(liga) }
+                m.addItem(.separator())
+            }
             item("Editar texto", "") { [weak self] in
                 if let id = self?.lienzo.doc.seleccion.first { self?.lienzo.editarTexto(id) }
             }
@@ -1043,6 +1144,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let app = NSMenuItem(); principal.addItem(app)
         let mApp = NSMenu()
         mApp.addItem(withTitle: "Acerca de sfmap", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        mApp.addItem(withTitle: "Ajustes…", action: #selector(mostrarAjustes), keyEquivalent: ",").target = self
         mApp.addItem(.separator())
         mApp.addItem(withTitle: "Ocultar sfmap", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         mApp.addItem(withTitle: "Salir de sfmap", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -1055,6 +1157,10 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         mArchivo.addItem(.separator())
         mArchivo.addItem(withTitle: "Guardar ahora", action: #selector(guardar), keyEquivalent: "s").target = self
         mArchivo.addItem(withTitle: "Recargar", action: #selector(recargar), keyEquivalent: "r").target = self
+        mArchivo.addItem(.separator())
+        mArchivo.addItem(withTitle: "Importar .sfmap…", action: #selector(importarArchivoMenu), keyEquivalent: "i").target = self
+        mArchivo.addItem(withTitle: "Descargar lienzo…", action: #selector(descargarLienzoMenu), keyEquivalent: "").target = self
+        mArchivo.addItem(withTitle: "Descargar plantilla…", action: #selector(descargarPlantillaMenu), keyEquivalent: "").target = self
         mArchivo.addItem(.separator())
         mArchivo.addItem(withTitle: "Exportar PNG…", action: #selector(exportarTodo), keyEquivalent: "e").target = self
         archivo.submenu = mArchivo
@@ -1078,6 +1184,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         mEdicion.addItem(withTitle: "Cortar", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         mEdicion.addItem(withTitle: "Copiar", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         mEdicion.addItem(withTitle: "Pegar", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        mEdicion.addItem(withTitle: "Seleccionar todo", action: #selector(NSResponder.selectAll(_:)), keyEquivalent: "a")
         /*
          * ORGANIZAR, en el menu y no solo en el teclado.
          *
@@ -1121,8 +1228,14 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.mainMenu = principal
     }
 
-    @objc private func deshacerMenu() { lienzo.doc.deshacer(); refrescarBarra() }
-    @objc private func rehacerMenu() { lienzo.doc.rehacer(); refrescarBarra() }
+    @objc private func deshacerMenu() {
+        if let campo = ventana.firstResponder as? NSTextView { campo.undoManager?.undo(); return }
+        lienzo.doc.deshacer(); refrescarBarra()
+    }
+    @objc private func rehacerMenu() {
+        if let campo = ventana.firstResponder as? NSTextView { campo.undoManager?.redo(); return }
+        lienzo.doc.rehacer(); refrescarBarra()
+    }
     @objc private func cien() {
         // ⌘0 sobre cromo = la UI vuelve a 1. Sobre el lienzo, el 100% de siempre.
         if let v = ventana, punteroSobreCromo(v.mouseLocationOutsideOfEventStream) {
@@ -1148,8 +1261,24 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     /// ⌘N: el lienzo nuevo cae donde está parada la mano — la carpeta abierta
     /// del panel, como en VSCode — y solo en la raíz si no hay ninguna abierta.
-    @objc private func nuevoLienzo() { crearPagina(en: lateral.carpetaContexto) }
-    @objc private func nuevaCarpeta() { crearCarpeta() }
+    @objc private func nuevoLienzo() { crearPagina(en: lateral.carpetaContexto ?? lateral.espacio) }
+    @objc private func nuevaCarpeta() { crearCarpeta(en: lateral.espacio) }
+
+    /// Entrar a un espacio abre donde lo dejaste DENTRO de él; si es la primera
+    /// vez, su primer lienzo suelto (o el primero que haya). Volver a la
+    /// portada (`nil`) no cierra nada: el lienzo se queda detrás.
+    private func irAEspacio(_ id: String?) {
+        lateral.espacio = id
+        guard let id else { return }
+        let dentro = Lateral.paginasDe(paginas, carpetas, espacio: id)
+        let recordada = UserDefaults.standard.string(forKey: "sfmap.ultima.\(id)")
+        let destino = dentro.first { $0.id == recordada }
+            ?? Lateral.lienzosDe(dentro, carpeta: id).first
+            ?? dentro.sorted { Lateral.porNombre($0.nombre, $1.nombre) }.first
+        guard let destino else { return }
+        if destino.id == actual?.id { lateral.activa = destino.id; return }
+        Task { await abrir(destino.id) }
+    }
     @objc private func exportarTodo() { exportar(soloSeleccion: false) }
     @objc private func alternarTemaMenu() { alternarTema() }
     @objc private func mostrarAtajosMenu() { mostrarAtajos() }
@@ -1198,7 +1327,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panelDoc.tema = t
         // El documento abierto se RE-PINTA con el tema nuevo: sus colores viven
         // en el texto atribuido, que ya está compuesto y no se entera solo.
-        if docAbierto, let d = panelDoc.docActual { panelDoc.mostrar(d) }
+        if docAbierto { panelDoc.refrescarContenido() }
         ventana.backgroundColor = t.lienzo
         ventana.appearance = NSAppearance(named: t.nombre == "oscuro" ? .darkAqua : .aqua)
         refrescarBarra()
@@ -1219,7 +1348,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func cargarLista() async {
         do {
             let (ps, cs) = try await Nube.paginas()
-            await MainActor.run {
+            let destino = await MainActor.run { () -> String? in
                 self.paginas = ps; self.carpetas = cs
                 self.lateral.paginas = ps
                 self.lateral.carpetas = cs
@@ -1236,11 +1365,25 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
                 let pedida = a.dropFirst().first { $0.count > 20 && !$0.hasPrefix("-") }
                 let destino = ps.first { $0.id == pedida } ?? ps.first { $0.id == recordada } ?? ps.first
-                if let d = destino { Task { await self.abrir(d.id) } }
+                /*
+                 * LA PORTADA AL ARRANCAR (11 sep 2026). Sin lienzo pedido por
+                 * argumentos, la app abre con el panel en la portada de
+                 * espacios y el último lienzo detrás, sin que el panel salte a
+                 * su espacio. Con uno pedido (Levy: `open -a sfmap --args
+                 * <pageId>`) va directo y el panel sí lo sigue.
+                 */
+                self.seguirEspacio = destino != nil && destino?.id == pedida
+                if !self.seguirEspacio {
+                    self.lateral.espacio = nil
+                    if !self.lateralAbierta { self.alternarLateral() }
+                }
+                return destino?.id
             }
+            if let destino { await abrir(destino) }
         } catch {
             decir("⚠︎ \(error.localizedDescription)", error: true)
         }
+        await MainActor.run { self.seguirEspacio = true; self.arranqueCompleto = true }
     }
 
     private func abrir(_ id: String) async {
@@ -1280,6 +1423,14 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let carpeta = ps_carpeta(self.paginas, self.carpetas, p.id)
                 self.header.poner(nombre: p.nombre, carpeta: carpeta)
                 self.lateral.activa = p.id
+                // El panel SIGUE al lienzo: abrir uno de otro espacio cambia el
+                // espacio (una orden de Levy, un enlace). Y se recuerda por
+                // espacio dónde te quedaste, para que entrar vuelva ahí.
+                let folder = self.paginas.first { $0.id == p.id }?.folderId
+                if let raiz = Lateral.raizDe(self.carpetas, carpeta: folder) {
+                    UserDefaults.standard.set(p.id, forKey: "sfmap.ultima.\(raiz)")
+                    if self.seguirEspacio, self.lateral.espacio != raiz { self.lateral.espacio = raiz }
+                }
                 if let i = self.paginas.firstIndex(where: { $0.id == p.id }) {
                     self.paginas[i].elementos = p.elementos.count
                     self.lateral.paginas = self.paginas
@@ -1319,7 +1470,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                            error: !Fuentes.faltantes.isEmpty)
             }
             // La puerta del compilador solo se ofrece si hay algo que compilar.
-            let rs = await Compilador.regiones(p.id)
+            let rs = Nube.esLocal ? [] : await Compilador.regiones(p.id)
             await MainActor.run {
                 self.regiones = rs
                 self.estado.alRecompilar = rs.isEmpty ? nil : { [weak self] in self?.recompilar() }
@@ -1450,6 +1601,9 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// El latido de la puerta agéntica: consume `orden.json` (Levy → app) y
     /// publica `seleccion.json` (app → Levy) cuando la selección cambió.
     private func latidoPuente() {
+        // La restauración inicial termina antes de consumir la orden. Si ambas
+        // cargas vuelan a la vez, la página recordada puede pisar la pedida.
+        guard arranqueCompleto else { return }
         if let o = Puente.leerOrden() {
             Task {
                 if let pg = o.abrir, pg != self.actual?.id {
@@ -1459,15 +1613,94 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     await MainActor.run { self.centrarSeleccionar(c) }
                 }
                 if let d = o.doc { await MainActor.run { self.abrirDoc(d) } }
+                if let id=o.enfocar { await MainActor.run {
+                    _=self.lienzo.enfocar(id);self.mapa.camara=self.lienzo.camara;self.refrescarBarra()
+                } }
+                if let v=o.tareasVista, let vista=VistaTareas(rawValue:v) { await MainActor.run { VistaTareas.elegida=vista; self.lienzo.needsDisplay=true } }
+                if let z=o.zoom, z.isFinite, z > 0 { await MainActor.run {
+                    self.lienzo.camara.zoom = min(8, max(0.02, z))
+                    self.mapa.camara = self.lienzo.camara
+                    self.estado.zoom = self.lienzo.camara.zoom
+                    self.lienzo.needsDisplay = true
+                    self.refrescarBarra()
+                    self.recordarCamara()
+                } }
+                if let id=o.ficha { await MainActor.run {
+                    if let el=self.lienzo.doc.porId(id) { self.abrirFicha(el) }
+                } }
+                if let id=o.embed { await MainActor.run { self.cerrarDoc(); self.activarEmbed(id) } }
             }
         }
         guard let p = actual else { return }
+        publicarHTML(pagina: p.id)
         let sel = lienzo.doc.seleccion
         if seleccionEscrita != sel {
             seleccionEscrita = sel
             Puente.escribirSeleccion(pagina: p.id, nombre: p.nombre,
                                      elementos: lienzo.doc.seleccionados)
         }
+    }
+
+    private func publicarHTML(pagina: String) {
+        let enPanel = docAbierto && panelDoc.esHTML
+        let lector = enPanel ? panelDoc.html : (embedHTML?.isHidden == false ? embedHTML?.documento : nil)
+        let visible = lector != nil
+        let guardar: ([String: Any]) -> Void = { [weak self] lectura in
+            guard let self else { return }
+            // Una lectura que aterrizó tras cerrar/cambiar de documento no se publica.
+            let actual = self.docAbierto && self.panelDoc.esHTML ? self.panelDoc.html
+                : (self.embedHTML?.isHidden == false ? self.embedHTML?.documento : nil)
+            guard lector === actual, pagina == self.actual?.id else { return }
+            var dato = lectura
+            dato["visible"] = visible
+            dato["page_id"] = pagina
+            if visible {
+                dato["modo"] = enPanel ? "lateral" : "embebido"
+                dato["ruta"] = enPanel ? self.panelDoc.docActual : self.embedHTML?.ruta
+                if enPanel { dato["ancho_panel"] = Int(self.panelDoc.bounds.width) }
+                else {
+                    dato["elemento_id"] = self.embedHTML?.elementoID
+                    dato["interactivo"] = self.embedHTML?.interactivo
+                    if let f = self.embedHTML?.frame { dato["marco"] = ["x": f.minX,"y":f.minY,"ancho":f.width,"alto":f.height] }
+                }
+            }
+            guard let contenido = try? JSONSerialization.data(withJSONObject: dato, options: [.sortedKeys]),
+                  contenido != self.ultimoEstadoHTML else { return }
+            self.ultimoEstadoHTML = contenido
+            dato["ts"] = ISO8601DateFormatter().string(from: Date())
+            try? FileManager.default.createDirectory(at: Puente.dir, withIntermediateDirectories: true)
+            if let salida = try? JSONSerialization.data(withJSONObject: dato, options: [.sortedKeys]) {
+                try? salida.write(to: Puente.dir.appendingPathComponent("documento.json"), options: .atomic)
+            }
+        }
+        if let lector { lector.leerEstado(guardar) }
+        else { guardar([:]) }
+    }
+
+    private func actualizarEmbed(preferido: String? = nil) {
+        let candidatos = lienzo.doc.elementos.filter { EmbedHTML.ruta($0) != nil }
+        let visible: (Elemento) -> Bool = { [self] e in
+            EmbedHTML.marco(e.caja, camara: lienzo.camara, viewport: lienzo.bounds.size).intersects(lienzo.bounds)
+        }
+        let elegido = candidatos.first { $0.id == preferido }
+            ?? candidatos.first { $0.id == embedHTML?.elementoID && visible($0) }
+            ?? candidatos.first(where: visible)
+        guard let e = elegido else { embedHTML?.isHidden = true; embedHTML?.desactivar(); return }
+        if embedHTML == nil {
+            let vista = EmbedHTML(frame: .zero)
+            vista.alAbrirLiga = { [weak self] s in self?.irA(s) }
+            vista.alPintar = { [weak self] in self?.lienzo.needsDisplay = true }
+            lienzo.addSubview(vista)
+            embedHTML = vista
+        }
+        embedHTML?.tema = lienzo.tema
+        embedHTML?.colocar(e, camara: lienzo.camara, viewport: lienzo.bounds.size)
+    }
+
+    private func activarEmbed(_ id: String) {
+        actualizarEmbed(preferido: id)
+        guard embedHTML?.elementoID == id else { return }
+        embedHTML?.activar()
     }
 
     /// Centra la cámara en un elemento y lo deja SELECCIONADO (el anillo de
@@ -1781,6 +2014,96 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+
+    @objc func mostrarAjustes() {
+        if ajustes?.isShown == true { ajustes?.close();return }
+        hoja?.removeFromSuperview();hoja=nil
+        let c=Ajustes(tema:lienzo.tema,docs:lienzo.documentosActivos,mapa:PreferenciasLienzo.minimapa(),local:Nube.esLocal,tienePagina:actual != nil,nombreTema:temaManual ?? "sistema",fondo:lienzo.fondo)
+        let pop=NSPopover();pop.behavior = .transient;pop.contentViewController=c;pop.contentSize=NSSize(width:360,height:490);ajustes=pop
+        c.alMinimapa={ [weak self] v in PreferenciasLienzo.fijarMinimapa(v);if let r=self?.ventana.contentView { self?.colocar(r) } }
+        c.alDocumentos={ [weak self] v in self?.cambiarDocumentos(v) }
+        c.alFondo={ [weak self] f in self?.lienzo.fondo=f;self?.estado.fondo=f;UserDefaults.standard.set(f.rawValue,forKey:"sfmap.fondo") }
+        c.alTema={ [weak self] t in
+            self?.temaManual=t == "sistema" ? nil:t
+            UserDefaults.standard.set(self?.temaManual,forKey:"sfmap.tema");self?.aplicarTema()
+        }
+        c.alAccion={ [weak self] a in
+            pop.close()
+            switch a {
+            case "plantilla":self?.descargarPortable(plantilla:true)
+            case "lienzo":self?.descargarPortable(plantilla:false)
+            case "importar":self?.importarArchivoMenu()
+            case "atajos":self?.mostrarAtajos()
+            default:break
+            }
+        }
+        pop.show(relativeTo:engrane.bounds,of:engrane,preferredEdge:.minY)
+    }
+    @objc func descargarLienzoMenu() { descargarPortable(plantilla:false) }
+    @objc func descargarPlantillaMenu() { descargarPortable(plantilla:true) }
+    @objc func importarArchivoMenu() {
+        let p=NSOpenPanel();p.allowedContentTypes=[ArchivoSFMap.tipo,.json];p.allowsMultipleSelection=false
+        p.message="Se añadirá como un lienzo nuevo. Tus otros lienzos se conservan."
+        p.beginSheetModal(for:ventana) { [weak self] r in
+            if r == .OK, let u=p.url { self?.importarPortable(u) }
+        }
+    }
+    func application(_ sender:NSApplication, open urls:[URL]) {
+        guard let u=urls.first(where:{$0.pathExtension.lowercased() == "sfmap"}) else { return }
+        Task { @MainActor in
+            while !self.arranqueCompleto { try? await Task.sleep(nanoseconds:100_000_000) }
+            self.importarPortable(u)
+        }
+    }
+    func importarPortable(_ url:URL) {
+        guard !importando else { return };importando=true
+        Task { @MainActor in
+            defer { self.importando=false }
+            do {
+                let size=(try url.resourceValues(forKeys:[.fileSizeKey])).fileSize ?? 0
+                guard size <= ArchivoSFMap.limite else { throw ArchivoSFMap.Fallo.invalido("El archivo supera 128 MB") }
+                let c=try ArchivoSFMap.leer(Data(contentsOf:url))
+                // Finalizar la edición y esperar el guardado antes de cambiar de página.
+                self.lienzo.cerrarEditor(guardando:true);self.lienzo.cerrarDesvanecido()
+                self.guardar()
+                for _ in 0..<100 where self.sucio || self.guardando {
+                    try await Task.sleep(nanoseconds:100_000_000)
+                    if self.estado.esError { break }
+                }
+                guard !self.sucio && !self.guardando else { throw ArchivoSFMap.Fallo.invalido("No se ha guardado el lienzo actual. Resuelve el guardado y vuelve a importar.") }
+                let nuevo=try await Nube.importar(c)
+                let (ps,cs)=try await Nube.paginas();self.paginas=ps;self.carpetas=cs;self.lateral.paginas=ps;self.lateral.carpetas=cs
+                await self.abrir(nuevo.id);self.lienzo.encuadrar()
+                self.decir("Importado · \(nuevo.nombre)")
+            } catch { self.errorArchivo(error) }
+        }
+    }
+    func descargarPortable(plantilla:Bool) {
+        lienzo.cerrarEditor(guardando:true)
+        guard var p=actual else { return }
+        p.elementos=lienzo.doc.elementos;p.camara=lienzo.camara
+        let doc=Nube.documentoActualizado(p,previo:p.documento)
+        let panel=NSSavePanel();panel.allowedContentTypes=[ArchivoSFMap.tipo]
+        panel.canCreateDirectories=true
+        panel.nameFieldStringValue=p.nombre + (plantilla ? " · plantilla":"") + ".sfmap"
+        panel.message=plantilla ? "Copia editable para compartir. Incluye las imágenes; los enlaces a documentos locales se omiten." : "Archivo editable con imágenes incluidas. No modifica tu lienzo."
+        panel.beginSheetModal(for:ventana) { [weak self] r in
+            guard r == .OK,let u=panel.url else { return }
+            Task { @MainActor in
+                do {
+                    let (d,n)=try await ArchivoSFMap.preparar(nombre:p.nombre,documento:doc,plantilla:plantilla)
+                    try d.write(to:u,options:.atomic)
+                    self?.decir(n == 0 ? "Archivo guardado" : "Archivo guardado · \(n) enlaces locales omitidos")
+                    NSWorkspace.shared.activateFileViewerSelecting([u])
+                } catch { self?.errorArchivo(error) }
+            }
+        }
+    }
+    func errorArchivo(_ error:Error) {
+        decir(error.localizedDescription,error:true)
+        let a=NSAlert();a.messageText="No se pudo completar";a.informativeText=error.localizedDescription;a.beginSheetModal(for:ventana)
+    }
+
     // MARK: atajos
     // ════════════════════════════════════════════════════════════════════════
 
@@ -1882,6 +2205,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Guardar antes de cerrar. Un cambio de hace medio segundo todavía no ha
     /// viajado, y perderlo por cerrar la ventana es el peor momento posible.
     func applicationShouldTerminate(_ s: NSApplication) -> NSApplication.TerminateReply {
+        lienzo.cerrarEditor(guardando: true)
         guard sucio, actual != nil else { return .terminateNow }
         guardar()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { NSApp.reply(toApplicationShouldTerminate: true) }
@@ -1951,7 +2275,7 @@ if CommandLine.arguments.contains("--centro-de-mando") {
     Task { @MainActor in
         await Cronista.compartido.cargarUnaVez()
         Escenas.centroDeMandoFueraDePantalla()
-        if let pg = try? await Nube.abrir("a91ada07-5a25-4307-a79a-4f0bb2ed3fab") {
+        if let id = ProcessInfo.processInfo.environment["SFMAP_QA_PAGE"], let pg = try? await Nube.abrir(id) {
             Escenas.costeDelPanelReal(pg.elementos)
         }
         sem.signal()
@@ -1978,6 +2302,34 @@ if CommandLine.arguments.contains("--sonda-dia") {
         RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
     }
     exit(0)
+}
+
+// Operación portátil verificable sin interfaz ni credenciales (combinar con --local-dir).
+if let i = CommandLine.arguments.firstIndex(of: "--portable-import"), i+1 < CommandLine.arguments.count {
+    Nube.cargarConfig()
+    let sem=DispatchSemaphore(value:0);var fallo=false
+    Task {
+        do {
+            let c=try ArchivoSFMap.leer(Data(contentsOf:URL(fileURLWithPath:CommandLine.arguments[i+1])))
+            let p=try await Nube.importar(c);print("IMPORT_OK \(p.id)")
+        } catch { print("IMPORT_ERROR \(error.localizedDescription)");fallo=true }
+        sem.signal()
+    }
+    sem.wait();exit(fallo ? 1:0)
+}
+if let i = CommandLine.arguments.firstIndex(of: "--portable-export"), i+2 < CommandLine.arguments.count {
+    Nube.cargarConfig()
+    let sem=DispatchSemaphore(value:0);var fallo=false
+    Task {
+        do {
+            let p=try await Nube.abrir(CommandLine.arguments[i+1])
+            let (data,n)=try await ArchivoSFMap.preparar(nombre:p.nombre,documento:Nube.documentoActualizado(p,previo:p.documento),plantilla:CommandLine.arguments.contains("--template"))
+            try data.write(to:URL(fileURLWithPath:CommandLine.arguments[i+2]),options:.atomic)
+            print("EXPORT_SFMAP_OK \(data.count) bytes · \(n) enlaces locales omitidos")
+        } catch { print("EXPORT_SFMAP_ERROR \(error.localizedDescription)");fallo=true }
+        sem.signal()
+    }
+    sem.wait();exit(fallo ? 1:0)
 }
 
 // El EXPORT de una página como asset publicable: recorte al contenido, 2x.
@@ -2049,8 +2401,11 @@ app.delegate = delegado
 app.setActivationPolicy(.regular)
 app.run()
 
-/// El nombre de la carpeta de una página, o nil.
+/// La ruta de una página en la cabecera: "Espacio › Carpeta" (o solo el
+/// espacio si está suelta en su raíz), o nil.
 func ps_carpeta(_ ps: [ResumenPagina], _ cs: [Carpeta], _ id: String) -> String? {
-    guard let f = ps.first(where: { $0.id == id })?.folderId else { return nil }
-    return cs.first { $0.id == f }?.nombre
+    guard let f = ps.first(where: { $0.id == id })?.folderId,
+          let c = cs.first(where: { $0.id == f }) else { return nil }
+    if let m = c.madre, let madre = cs.first(where: { $0.id == m }) { return "\(madre.nombre) › \(c.nombre)" }
+    return c.nombre
 }

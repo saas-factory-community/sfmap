@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
-const require = createRequire(`${process.env.HOME}/Developer/business-os/arbrain/`)
+const require = createRequire(import.meta.url)
 const { getStroke } = require('perfect-freehand')
 
 const [, , fixture = 'banco/trazos.json', salida = '/tmp/banco'] = process.argv

@@ -133,6 +133,36 @@ final class ManoDeDanielTests: XCTestCase {
         XCTAssertTrue(titulos(barra).contains { $0.hasPrefix("Desagrupar") })
     }
 
+    /**
+     * BAJAR TAMAÑO NO MUEVE EL CONTROL DEBAJO DEL CURSOR.
+     *
+     * La tipografía remaqueta las cajas seleccionadas. Si la barra vuelve a
+     * anclarse durante ese mismo clic, el botón de disminuir huye y el clic
+     * siguiente cae en el lienzo vacío, que borra la selección múltiple.
+     */
+    @MainActor
+    func testLaBarraNoHuyeMientrasEditaLaSeleccion() {
+        let raiz = NSView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+        let barra = BarraContextual(frame: .zero)
+        raiz.addSubview(barra)
+        barra.seleccion = [el("a"), el("b", 500)]
+
+        let camara = Camara(x: 0, y: 0, zoom: 1)
+        barra.reconstruir(caja: NSRect(x: -300, y: -100, width: 900, height: 300),
+                          camara: camara, viewport: raiz.bounds.size)
+        let origen = barra.frame.origin
+
+        // La caja se encogió y cambió de centro, justo lo que hace remaquetar
+        // al bajar el tamaño de varios componentes.
+        barra.reconstruir(caja: NSRect(x: -100, y: -40, width: 380, height: 120),
+                          camara: camara, viewport: raiz.bounds.size,
+                          conservarPosicion: true)
+
+        XCTAssertEqual(barra.frame.origin.x, origen.x, accuracy: 0.001)
+        XCTAssertEqual(barra.frame.origin.y, origen.y, accuracy: 0.001)
+        XCTAssertEqual(barra.seleccion.count, 2)
+    }
+
     /// ⚠️ La barra NECESITA una vista madre: sus paneles se cuelgan del
     /// `superview`, no de ella. Sin madre el panel se construye y se tira, y
     /// la prueba no encuentra nada — pareciendo un fallo de la fila que busca.

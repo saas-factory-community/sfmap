@@ -28,10 +28,13 @@ final class PuenteTests: XCTestCase {
         let respaldo = try? Data(contentsOf: Puente.ordenURL)   // no pisar una orden real
         defer { if let r = respaldo { try? r.write(to: Puente.ordenURL) } }
 
-        try Data(#"{"abrir": "pagina-x", "centrar": "n:03"}"#.utf8).write(to: Puente.ordenURL)
+        try Data(#"{"abrir": "pagina-x", "centrar": "n:03", "enfocar": "zona", "ficha": "c:arista", "zoom": 1}"#.utf8).write(to: Puente.ordenURL)
         let o = Puente.leerOrden()
         XCTAssertEqual(o?.abrir, "pagina-x")
         XCTAssertEqual(o?.centrar, "n:03")
+        XCTAssertEqual(o?.enfocar,"zona")
+        XCTAssertEqual(o?.ficha,"c:arista")
+        XCTAssertEqual(o?.zoom,1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: Puente.ordenURL.path),
                        "la orden debe borrarse al leerse — si sobrevive, se reaplica en loop")
         XCTAssertNil(Puente.leerOrden(), "sin archivo no hay orden")

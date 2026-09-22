@@ -15,9 +15,12 @@ que comparar a ojo no es un espejo.
 Ahora se DERIVA. Correr `python3 scripts/tema-desde-tokens.py` y volver a
 compilar; si el web cambia un tono, aqui cambia con un comando y no con memoria.
 """
-import re, sys, pathlib
+import re, sys, pathlib, os
 
-TOKENS = pathlib.Path.home() / "Developer/business-os/arbrain/src/features/canvas/theme/tokens.ts"
+token_path = os.environ.get("SFMAP_TOKENS")
+if not token_path:
+    raise SystemExit("Define SFMAP_TOKENS con la ruta a tokens.ts de tu lienzo web.")
+TOKENS = pathlib.Path(token_path)
 TEMA = pathlib.Path(__file__).parent.parent / "Sources/SFMap/Tema.swift"
 
 src = TOKENS.read_text()

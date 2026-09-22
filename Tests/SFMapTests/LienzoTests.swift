@@ -102,12 +102,52 @@ final class LienzoTests: XCTestCase {
             .objeto(["kind": .texto("chip"), "text": .texto("etq"), "lines": .lista([.texto("etq")]),
                      "x": .numero(180), "y": .numero(130), "width": .numero(44), "height": .numero(18), "style": estilo]),
         ])])
-        e.escribir("nuevo titulo")
+        // ⭐ 31 AGO 2026: una tarjeta se edita ENTERA (titulo + items como
+        // lineas). El editor entrega el texto completo; el chip y el pie
+        // siguen siendo intocables.
+        XCTAssertEqual(e.textoEditable, "viejo\nrenglon",
+                       "el editor enseña titulo + items, no solo el titulo")
+        e.escribir("nuevo titulo\nrenglon")
         let partes = e.textoLigado ?? []
         XCTAssertEqual(partes.count, 4, "las cuatro partes siguen ahi")
         XCTAssertEqual(partes.first(where: { $0.kind == "title" })?.texto, "nuevo titulo")
+        XCTAssertEqual(partes.first(where: { $0.kind == "item" })?.texto, "renglon")
         XCTAssertEqual(partes.first(where: { $0.kind == "caption" })?.texto, "el pie")
         XCTAssertEqual(partes.first(where: { $0.kind == "chip" })?.texto, "etq")
+    }
+
+    /// ⭐ EL BUG DEL 31 AGO: doble clic a una tarjeta enseñaba SOLO el titulo
+    /// ("la descripcion tiene mas texto"). Ahora los items se agregan y quitan
+    /// como lineas, con el estilo del primer item como plantilla.
+    func testEscribirTarjetaAgregaYQuitaItems() {
+        let estilo = EstiloTexto().json
+        var e = figura(240, 160, extra: ["text": .lista([
+            .objeto(["kind": .texto("title"), "text": .texto("t"), "lines": .lista([.texto("t")]),
+                     "x": .numero(16), "y": .numero(16), "width": .numero(200), "height": .numero(20), "style": estilo]),
+            .objeto(["kind": .texto("item"), "text": .texto("uno"), "lines": .lista([.texto("uno")]),
+                     "x": .numero(16), "y": .numero(40), "width": .numero(200), "height": .numero(18), "style": estilo]),
+            .objeto(["kind": .texto("chip"), "text": .texto("etq"), "lines": .lista([.texto("etq")]),
+                     "x": .numero(180), "y": .numero(130), "width": .numero(44), "height": .numero(18), "style": estilo]),
+        ])])
+        e.escribir("t\nuno\ndos\ntres")
+        var items = (e.textoLigado ?? []).filter { $0.kind == "item" }
+        XCTAssertEqual(items.map(\.texto), ["uno", "dos", "tres"], "Enter agrega items")
+        e.escribir("t")
+        items = (e.textoLigado ?? []).filter { $0.kind == "item" }
+        XCTAssertTrue(items.isEmpty, "borrar las lineas quita los items")
+        XCTAssertEqual(e.textoLigado?.first(where: { $0.kind == "chip" })?.texto, "etq",
+                       "el chip sobrevive aunque los items se vayan")
+    }
+
+    /// Una figura simple de la mano NO es tarjeta: su texto sigue siendo UNA
+    /// parte, con saltos de linea adentro si los tiene.
+    func testFiguraSimpleNoSeParteEnItems() {
+        var e = figura()
+        e.escribir("hola")
+        XCTAssertFalse(e.esTarjeta)
+        e.escribir("hola\nmundo")
+        XCTAssertEqual(e.textoLigado?.count, 1, "sigue siendo una sola parte")
+        XCTAssertEqual(e.textoLigado?.first?.texto, "hola\nmundo")
     }
 
     /// El pie se re-maqueta COLGANDO por debajo de la caja, no dentro.
@@ -667,8 +707,8 @@ final class LienzoTests: XCTestCase {
 final class TemaEspejoTests: XCTestCase {
 
     private var tokens: String? {
-        let p = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Developer/business-os/arbrain/src/features/canvas/theme/tokens.ts")
+        guard let path = ProcessInfo.processInfo.environment["SFMAP_TOKENS"] else { return nil }
+        let p = URL(fileURLWithPath: path)
         return try? String(contentsOf: p, encoding: .utf8)
     }
 
@@ -680,8 +720,7 @@ final class TemaEspejoTests: XCTestCase {
 
     func testElTemaSigueSiendoElEspejoDeTokens() throws {
         guard let src = tokens else {
-            print("⚠︎ sin tokens.ts a la vista: no se puede comprobar el espejo")
-            return
+            throw XCTSkip("Integración opcional: define SFMAP_TOKENS para comprobar el espejo web")
         }
         func bloque(_ n: String) -> String {
             let i = src.range(of: "export const \(n): Theme = {")!.lowerBound

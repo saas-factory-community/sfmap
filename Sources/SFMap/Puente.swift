@@ -26,12 +26,13 @@ import AppKit
  */
 enum Puente {
     static var dir: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/sfmap")
+        if Nube.esLocal { return Nube.directorioLocal.appendingPathComponent("Puente") }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/sfmap")
     }
     static var ordenURL: URL { dir.appendingPathComponent("orden.json") }
     static var seleccionURL: URL { dir.appendingPathComponent("seleccion.json") }
 
-    struct Orden { var abrir: String?; var centrar: String?; var doc: String? }
+    struct Orden { var abrir: String?; var centrar: String?; var doc: String?; var enfocar: String?; var ficha: String?; var embed: String?; var zoom: Double? = nil; var tareasVista: String? = nil }
 
     /// Lee y CONSUME la orden pendiente. Borrar antes de aplicar evita el loop
     /// de una orden que falla y se reintenta para siempre.
@@ -39,8 +40,8 @@ enum Puente {
         guard let d = try? Data(contentsOf: ordenURL) else { return nil }
         try? FileManager.default.removeItem(at: ordenURL)
         guard let j = try? JSONDecoder().decode(Json.self, from: d) else { return nil }
-        let o = Orden(abrir: j["abrir"]?.s, centrar: j["centrar"]?.s, doc: j["doc"]?.s)
-        return (o.abrir == nil && o.centrar == nil && o.doc == nil) ? nil : o
+        let o = Orden(abrir: j["abrir"]?.s, centrar: j["centrar"]?.s, doc: j["doc"]?.s, enfocar: j["enfocar"]?.s, ficha: j["ficha"]?.s, embed: j["embed"]?.s, zoom: j["zoom"]?.d, tareasVista:j["tareasVista"]?.s)
+        return (o.abrir == nil && o.centrar == nil && o.doc == nil && o.enfocar == nil && o.ficha == nil && o.embed == nil) ? nil : o
     }
 
     /// La selección de Daniel, para que Levy sepa de qué habla "esto".
@@ -63,6 +64,7 @@ enum Puente {
         let t = e.textoEditable
         if !t.isEmpty { r["titulo"] = .texto(String(t.prefix(120))) }
         if e.tipo == "frame", let ti = e.titulo { r["titulo"] = .texto(ti) }
+        for k in ["name", "link", "evidence", "relation", "decision"] { if let v=e.crudo[k] { r[k]=v } }
         return r
     }
 

@@ -160,6 +160,17 @@ extension Pintor {
         ctx.setAlpha(e.opacidad)
         let camino = CGMutablePath()
         camino.addRoundedRect(in: e.caja, cornerWidth: 6, cornerHeight: 6)
+        // ⚡ De lejos (menos de `lodImagenPx` de ancho en pantalla) un bitmap se
+        // reescala entero en cada cuadro para ocupar una mancha: se pinta la
+        // mancha y ya. Al acercarse vuelve la imagen real.
+        if !Pintor.sinLOD && e.ancho * camara.zoom < Pintor.lodImagenPx {
+            Pintor.omitidosCuadro += 1
+            ctx.addPath(camino)
+            ctx.setFillColor(tema.rol("sticky").relleno.withAlphaComponent(0.6).cgColor)
+            ctx.fillPath()
+            ctx.restoreGState()
+            return
+        }
         if let src = e.crudo["src"]?.s, let img = Imagenes.de(src, alLlegar: alLlegar),
            var cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) {
             // EL RECORTE NO TOCA EL ARCHIVO: es una fracción guardada en el
@@ -206,6 +217,30 @@ extension Pintor {
     /// segundo. La direccion se abre en el navegador de verdad con ⌘+clic, que
     /// es donde una pagina se lee bien.
     func embed(_ e: Elemento) {
+        if let ruta = EmbedHTML.ruta(e) {
+            ctx.saveGState()
+            ctx.setAlpha(e.opacidad)
+            ctx.setFillColor(tema.rol("card").relleno.cgColor)
+            ctx.fill(e.caja)
+            let cab = e.ancho * Double(EmbedHTML.cabecera / EmbedHTML.anchoLogico)
+            if let imagen = PreviewHTML.imagen(ruta), let cg = imagen.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+                ctx.saveGState()
+                ctx.translateBy(x: e.x, y: e.y + e.alto)
+                ctx.scaleBy(x: 1, y: -1)
+                ctx.draw(cg, in: CGRect(x: 0, y: 0, width: e.ancho, height: max(1, e.alto - cab)))
+                ctx.restoreGState()
+            } else {
+                var ayuda = EstiloTexto(); ayuda.tamano = e.ancho * 0.017
+                renglon("Cargando HTML…", ayuda, tema.pieTexto, x: e.x, y: e.y + e.alto / 2,
+                        ancho: e.ancho, alinea: "center")
+            }
+            var est = EstiloTexto(); est.peso = 700; est.tamano = e.ancho * 0.0125
+            renglon(e.crudo["name"]?.s ?? "HTML interactivo", est, tema.tituloTexto,
+                    x: e.x + cab / 3, y: e.y + cab * 0.65, ancho: e.ancho - cab, alinea: "left")
+            ctx.setStrokeColor(tema.reticula.cgColor); ctx.setLineWidth(2); ctx.stroke(e.caja)
+            ctx.restoreGState()
+            return
+        }
         ctx.saveGState()
         ctx.setAlpha(e.opacidad)
         let camino = CGMutablePath()
@@ -264,28 +299,32 @@ extension Pintor {
     ///
     /// Su tamaño se mide en px de PANTALLA: una manija que encoge al alejarse se
     /// vuelve imposible de agarrar justo cuando mas falta hace.
-    func manijas(_ r: CGRect) {
+    func manijas(_ r: CGRect, texto: Bool = false) {
         let z = camara.zoom
-        let lado = Geo.MANIJA_PX / z
-        ctx.setLineWidth(1.5 / z)
+        let lado = (texto ? 6 : Geo.MANIJA_PX) / z
+        ctx.setLineWidth((texto ? 1 : 1.5) / z)
         ctx.setLineDash(phase: 0, lengths: [])
-        // El tirador de giro: una linea corta y un circulo, arriba del centro.
-        let g = Geo.centroGiro(r, zoom: z)
-        ctx.setStrokeColor(tema.seleccion.cgColor)
-        ctx.move(to: CGPoint(x: r.midX, y: r.minY))
-        ctx.addLine(to: CGPoint(x: g.x, y: g.y + lado / 2))
-        ctx.strokePath()
-        ctx.setFillColor(tema.rol("card").relleno.cgColor)
-        let cg = CGRect(x: g.x - lado / 2, y: g.y - lado / 2, width: lado, height: lado)
-        ctx.fillEllipse(in: cg); ctx.strokeEllipse(in: cg)
+        if !texto {
+            // El tirador de giro: una linea corta y un circulo, arriba del centro.
+            let g = Geo.centroGiro(r, zoom: z)
+            ctx.setStrokeColor(tema.seleccion.cgColor)
+            ctx.move(to: CGPoint(x: r.midX, y: r.minY))
+            ctx.addLine(to: CGPoint(x: g.x, y: g.y + lado / 2))
+            ctx.strokePath()
+            ctx.setFillColor(tema.rol("card").relleno.cgColor)
+            let cg = CGRect(x: g.x - lado / 2, y: g.y - lado / 2, width: lado, height: lado)
+            ctx.fillEllipse(in: cg); ctx.strokeEllipse(in: cg)
 
-        for h in Geo.MANIJAS {
+        }
+
+        for h in Geo.MANIJAS where !texto || !["n", "s"].contains(h) {
             let c = Geo.centroManija(r, h)
             let caja = CGRect(x: c.x - lado / 2, y: c.y - lado / 2, width: lado, height: lado)
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: caja, cornerWidth: 2 / z, cornerHeight: 2 / z)
+            if texto { camino.addEllipse(in: caja) }
+            else { camino.addRoundedRect(in: caja, cornerWidth: 2 / z, cornerHeight: 2 / z) }
             ctx.addPath(camino); ctx.setFillColor(tema.rol("card").relleno.cgColor); ctx.fillPath()
-            ctx.addPath(camino); ctx.setStrokeColor(tema.seleccion.cgColor); ctx.strokePath()
+            ctx.addPath(camino); ctx.setStrokeColor((texto ? tema.cuerpoTexto.withAlphaComponent(0.45) : tema.seleccion).cgColor); ctx.strokePath()
         }
     }
 

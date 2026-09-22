@@ -48,6 +48,9 @@ enum Foto {
         let visibles = els.filter { $0.tipo != "connector" && ($0.caja.width > 0 || $0.tipo == "text") }
         guard var r = visibles.first?.cajaVisual else { return nil }
         for e in visibles.dropFirst() { r = r.union(e.cajaVisual) }
+        for e in els where e.tipo == "connector" && e.ruta.count >= 2 {
+            r = r.union(TrazoConector.camino(e).boundingBoxOfPath)
+        }
         return r.insetBy(dx: -60, dy: -60)
     }
 
@@ -79,6 +82,7 @@ enum Foto {
                                backing: .buffered, defer: false)
             let l = Lienzo(frame: marco)
             win.contentView = l
+            Pintor.sinLOD = true   // un PNG se mira de cerca aunque la cámara esté lejos
             if let i = CommandLine.arguments.firstIndex(of: "--tema"),
                i + 1 < CommandLine.arguments.count, CommandLine.arguments[i + 1] == "oscuro" {
                 l.tema = .oscuro
@@ -113,6 +117,7 @@ enum Foto {
                                backing: .buffered, defer: false)
             let l = Lienzo(frame: marco)
             win.contentView = l
+            Pintor.sinLOD = true   // un PNG se mira de cerca aunque la cámara esté lejos
             l.doc.cargar(p.elementos)
             l.encuadrar()
             guard let rep = l.bitmapImageRepForCachingDisplay(in: l.bounds) else {

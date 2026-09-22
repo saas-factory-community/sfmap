@@ -1,92 +1,20 @@
-# sfmap — el lienzo de sistemas, nativo
+# sfmap · edición pública de SaaS Factory
 
-App de escritorio macOS en Swift para el canvas v4 de Arbrain. **No reemplaza a
-Arbrain**: Arbrain es el centro de mando; sfmap es la herramienta de oficio para
-diseñar los sistemas del negocio.
+App nativa AppKit/CoreGraphics, macOS 15+, Swift 6 en modo Swift 5. Lee `README.md`, `docs/portabilidad.md` y `docs/integraciones.md` antes de cambiar distribución o persistencia.
 
-## El reparto, y por qué
+## Contratos
 
-```
-SUPERFICIE (Swift, aquí)          COMPILADOR (Node, en arbrain/)
-pintar · pan · zoom · arrastre    medir texto · componer · dagre · rutear
-120 veces por segundo             una vez por diagrama, 110 ms
-```
+1. **Local por defecto.** Sin configuración usa Application Support/sfmap/Biblioteca. `--local-dir` aísla pruebas y puente. Una caída de nube nunca abre silenciosamente otra biblioteca.
+2. **Configuración explícita.** Solo `~/.sfmap/env`; nada de descubrir repos privados o usuarios fijos. URL, clave y UUID de propietario para nube. Nunca empaquetar credenciales.
+3. **JSON crudo.** Preservar campos desconocidos, regiones y propiedades de elementos. Para nube, releer antes de guardar y comparar `agent_version` mediante CAS. Cero filas escritas es error.
+4. **Portabilidad.** `.sfmap` lleva imágenes embebidas. Se omiten enlaces locales y metadatos privados. HTML/widgets no soportados deben fallar explícitamente. Importar siempre crea una página nueva.
+5. **Mismo trazo.** Borrador, commit y recarga pasan por el mismo motor de tinta. No sustituir geometría definitiva con una aproximación distinta en vivo.
+6. **Fuentes incluidas.** Resources/fuentes viaja dentro de la app. El build no puede depender del checkout del autor.
+7. **Firma estable.** `SFMAP_IDENTITY` selecciona el certificado; jamás fallback ad hoc. `scripts/package.sh --no-install` no reemplaza la app instalada. Versiones anteriores se conservan en dist/previous.
+8. **Diseño y foco.** El lienzo es protagonista: barra compacta, estado por color, documentos desactivados por defecto, detalles al acercarse. Mantener tema claro y oscuro legibles.
+9. **Edición pública.** Los núcleos de Dia son archivos incluidos con datos demo, no symlinks a sfcal. No importar memorias, métricas, compromisos, IDs ni rutas personales del desarrollo privado.
+10. **Verificación.** `swift test`, build release y prueba real importación→exportación de la plantilla. Pruebas de servicios externos son opcionales, explícitas y no acceden a producción.
 
-Reescribir el compilador en Swift serían meses (dagre + medición de fuentes con
-fontkit) para ganar en el único eje que no aprieta. La superficie sí gana: un
-`NSEvent` toca la cámara y el frame siguiente ya salió, sin bucle de eventos de
-navegador, sin React y sin recolector de basura en medio.
+## Distribución
 
-## Comandos
-
-```bash
-swift build                 # compilar
-swift run SFMap             # correr desde el código
-./scripts/package.sh        # .app firmado + instalar en ~/Applications
-./scripts/package.sh && open ~/Applications/sfmap.app
-swiftc -O scripts/icono.swift -o /tmp/i && /tmp/i . && iconutil -c icns assets/sfmap.iconset -o assets/icon.icns
-
-# EL BANCO DE TRAZOS — el motor de tinta no se juzga con adjetivos
-node scripts/banco-web.mjs banco/trazos.json /tmp/banco   # contornos del referente web
-swift run -c release SFMap --banco /tmp/banco --hoja sfmap,viejo,web-pf,web-v4
-swift run -c release SFMap --banco /tmp/banco --ab sfmap,web-pf --semilla 41  # A/B ciego
-swift run -c release SFMap --banco /tmp/d --solo real-firma --escala 12       # detalle
-swift run -c release SFMap --escena sonda-tinta --sin-guardar                 # latencia real
-node scripts/verificar-formato.mjs /tmp/trazo-sfmap.json                      # ida y vuelta
-```
-
-Abrir una página concreta: `open -a sfmap --args <pageId>`.
-
-## Invariantes (romperlos cuesta caro)
-
-1. **Es el MISMO documento que el lienzo web.** Los elementos guardan su JSON
-   crudo (`Elemento.crudo`) y al guardar se re-emite entero. Un campo que sfmap
-   no conoce SOBREVIVE. Decodificar a una struct cerrada y re-serializar
-   borraría en silencio lo que aún no comprende — así vació el v3 su capa
-   `regions`.
-2. **Guardar re-lee `regions` antes de escribir** y compara `agent_version`.
-   Cero filas afectadas es ERROR, nunca un "guardado" silencioso.
-3. **El motor de tinta es una FUNCIÓN PURA de los puntos** (`Tinta.camino`).
-   No tiene modo "en vivo". El referente web sí (`last: !live`) y con él el
-   borrador y el trazo guardado son dos dibujos distintos; aquí la divergencia
-   no se vigila, no existe. El dibujo en curso y el elemento guardado salen del
-   mismo código con los mismos números — medido: los 16 casos del banco dan
-   PNG byte-idénticos por los dos caminos.
-   Corolario: nada que dependa del reloj de pared o de estado externo puede
-   entrar en el motor, o el trazo dejaría de ser reproducible.
-
-4. **Los campos de la pluma son ADITIVOS y CONDICIONALES.** Un punto guarda
-   `x`, `y`, `pressure` siempre, y `tiltX`/`tiltY`/`t` **solo si existen**. El
-   lienzo web lee los tres primeros, ignora el resto y lo conserva al guardar
-   (verificado con `scripts/verificar-formato.mjs`). Escribir `tilt: 0` para un
-   ratón sería inventar un dato: "sin inclinación" y "vertical" no son lo mismo,
-   y el motor los distingue.
-
-5. **Se cuantiza en la CAPTURA, no al guardar** (`puntoDePluma`): centésimas de
-   unidad en x/y, décimas de ms en t. Recortar al guardar dejaría el borrador y
-   el guardado con números distintos en el último decimal — y ahí se acabó el
-   invariante 3. De paso, el JSON de un trazo de 600 puntos baja de 53 KB a 31.
-
-6. **Las fuentes son los MISMOS `.ttf`** que mide el compilador, copiados a
-   `Resources/fuentes` y empaquetados en `Contents/Resources/fuentes`. Una
-   fuente parecida daría un ancho distinto del que la caja declara.
-7. **Firma con identidad estable ("SFlow Dev"), nunca ad-hoc.** La ad-hoc ancla
-   los permisos al hash del binario y cada rebuild los revoca en silencio.
-8. **Nunca pedir `page_elements` para LISTAR.** Medido: 31.92 MB / 8.0 s contra
-   0.02 MB / 0.56 s. El contador se rellena al abrir.
-9. **La credencial se lee de `agent-server/.env`** (o `~/.sfmap/env`) y jamás se
-   hornea en el bundle: una llave dentro de un .app viaja con el .app.
-
-## Lo que hace hoy
-
-Abre · lista tus lienzos y carpetas · pinta figuras, texto, **tinta de plumilla**
-(spline centrípeta, ancho continuo por presión/velocidad/inclinación, plumilla
-elíptica con el tilt de la PW600L — ver `Sources/SFMap/Tinta.swift`), secciones y
-conectores con los roles y el tema del sistema · claro/oscuro siguiendo a macOS
-· pan, zoom, encuadrar (⇧1), tamaño real (0) · seleccionar y arrastrar ·
-guarda sin destruir · recuerda dónde lo dejaste.
-
-## Lo que NO hace todavía
-
-Crear elementos · editar texto · deshacer · llamar al compilador desde la app
-(hoy los diagramas se generan por `POST localhost:3000/api/canvas/region`).
+El repositorio público es `saas-factory-community/sfmap`. La app y la plantilla deben poder abrirse desde un Mac sin infraestructura del autor. No anunciar notarización, soporte Intel o sincronización si no se verificaron.

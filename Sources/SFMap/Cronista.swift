@@ -39,6 +39,7 @@ struct EstadoDia {
     var eventos = Lectura<[CalEvent]>.vacia()
     var calendarios: [CalendarInfo] = []
     var tareas = Lectura<[TareaDia]>.vacia()
+    var completadas = Lectura<[TareaDia]>.vacia()
     var habitos = Lectura<LecturaHabitos.Estado>.vacia()
     /// EL PACTO: el MRR que decide si el trofeo se gana. Mismo SSOT que los
     /// sensores del negocio (`daily_business_metrics`, reconciliada de Polar).
@@ -52,7 +53,7 @@ struct EstadoDia {
     /// lectura que confirma lo mismo no es un cambio en pantalla.
     var huella: String {
         let ev = (eventos.valor ?? []).map { "\($0.id)|\($0.summary)|\($0.start.timeIntervalSince1970)|\($0.end.timeIntervalSince1970)" }
-        let ta = (tareas.valor ?? []).map { "\($0.contenido)|\($0.dia ?? "")|\($0.hora ?? "")|\($0.prioridad)" }
+        let ta = ((tareas.valor ?? []) + (completadas.valor ?? [])).map { "\($0.estado ?? "")|\($0.contenido)|\($0.dia ?? "")|\($0.hora ?? "")|\($0.prioridad)" }
         let ha = (habitos.valor?.marcas ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value.rawValue)" }
         let fallos = [eventos.fallo, tareas.fallo, habitos.fallo].map { $0 ?? "" }
             // El MRR y el FILTRO también entran: si Daniel filtra en sfcal, el
@@ -140,11 +141,13 @@ final class Cronista {
         let (d, h) = Cronista.ventana()
         async let ev = LecturaGoogle.eventos(desde: d, hasta: h)
         async let tk = LecturaTodoist.tareas()
+        async let co = LecturaTodoist.completadas()
         async let mr = LecturaMRR.serie()
         let (e, t, m) = await (ev, tk, mr)
         estado.eventos = e
         estado.calendarios = LecturaGoogle.ultimosCalendarios
         estado.tareas = t
+        estado.completadas = await co
         estado.mrr = m
         estado.habitos = LecturaHabitos.del(Date())
         estado.filtro = FiltroTareas.cargar()
@@ -214,8 +217,10 @@ final class Cronista {
         enVuelo.insert("todo")
         Task.detached(priority: .utility) {
             let l = await LecturaTodoist.tareas()
+            let completadas = await LecturaTodoist.completadas()
             await MainActor.run {
                 self.enVuelo.remove("todo")
+                self.estado.completadas = completadas
                 if l.valor != nil { self.estado.tareas = l }
                 else { self.estado.tareas.fallo = l.fallo }
                 self.avisarSiCambio()

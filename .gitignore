@@ -2,3 +2,9 @@
 dist/
 assets/sfmap.iconset/
 .DS_Store
+
+.env
+.env.*
+!.env.example
+node_modules/
+.sfmap-icono.html

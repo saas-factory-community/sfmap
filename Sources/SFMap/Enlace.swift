@@ -24,6 +24,7 @@ enum Enlace {
     enum Destino: Equatable {
         case documento(String)   // ruta relativa al repo
         case pagina(String)      // page_id
+        case elemento(String)    // zoom a una zona del mismo lienzo
         case video(URL)
         case web(URL)
         /// La APP dueña de lo que el widget enseña. Enmienda del 25 ago: el
@@ -64,31 +65,13 @@ enum Enlace {
         nombre == "todoist" ? URL(string: "https://app.todoist.com/app/today") : nil
     }
 
-    /// La raíz del repo: de ahí cuelgan las rutas de `doc:`.
-    ///
-    /// Se busca por MARCA en disco (`CLAUDE.md` + `.claude/`) subiendo desde
-    /// varios puntos de partida, y no por una ruta escrita a mano, porque la
-    /// app corre desde `~/Applications` en producción y desde `.build` en
-    /// desarrollo: una constante habría funcionado en exactamente uno de los
-    /// dos sitios. Se puede forzar con `SFMAP_REPO` (lo usan las pruebas).
+    /// Documentos locales. SFMAP_REPO permite elegir una biblioteca propia.
     static var repo: URL = {
         if let s = ProcessInfo.processInfo.environment["SFMAP_REPO"] {
             return URL(fileURLWithPath: s)
         }
-        let fm = FileManager.default
-        var candidatos = [URL(fileURLWithPath: #filePath)]
-        candidatos.append(fm.homeDirectoryForCurrentUser.appendingPathComponent("Developer/business-os"))
-        for c in candidatos {
-            var u = c
-            for _ in 0..<12 {
-                if fm.fileExists(atPath: u.appendingPathComponent("CLAUDE.md").path),
-                   fm.fileExists(atPath: u.appendingPathComponent(".claude").path) { return u }
-                let arriba = u.deletingLastPathComponent()
-                if arriba.path == u.path { break }
-                u = arriba
-            }
-        }
-        return fm.homeDirectoryForCurrentUser.appendingPathComponent("Developer/business-os")
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/sfmap/Documentos", isDirectory: true)
     }()
 
     /// Extensiones y anfitriones que hacen de una liga un VÍDEO.
@@ -127,6 +110,10 @@ enum Enlace {
             let id = String(s.dropFirst(5)).trimmingCharacters(in: .whitespaces)
             return id.isEmpty ? nil : .pagina(id)
         }
+        if s.lowercased().hasPrefix("node:") {
+            let id=String(s.dropFirst(5)).trimmingCharacters(in:.whitespacesAndNewlines)
+            return id.isEmpty || id.contains(where: { $0.isWhitespace }) ? nil : .elemento(id)
+        }
         if s.lowercased().hasPrefix("video:") { s = String(s.dropFirst(6)) }
         // Sin esquema se asume https: pegar "saasfactory.so" es lo normal, y
         // una URL sin esquema la rechaza URLSession en silencio (el mismo fallo
@@ -148,6 +135,7 @@ enum Enlace {
         switch leer(liga) {
         case .documento: .documento
         case .pagina:    .pagina
+        case .elemento:  .pagina
         case .video:     .video
         case .web:       .web
         case .app:       .app

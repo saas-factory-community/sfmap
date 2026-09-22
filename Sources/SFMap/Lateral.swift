@@ -166,6 +166,36 @@ final class Lateral: NSView {
     /// ⚠️ Existe porque ← y → cambian de carpeta SIN abrir nada: sin una marca
     /// visible, esas dos teclas no harian nada observable y se sentirian rotas.
     var foco: String? { didSet { if oldValue != foco { reconstruir() } } }
+    /**
+     * EL ESPACIO (11 sep 2026). Daniel: *"si estoy trabajando en el negocio,
+     * ¿pa' qué quiero ver personal, lab, plantillas?"*.
+     *
+     * Un espacio ES una carpeta raíz. No hay tabla ni campo nuevo: el
+     * `parent_id` que ya existía da la jerarquía y el lienzo web sigue viendo
+     * las mismas carpetas. Lo que cambia es la VISTA. Con `espacio == nil` el
+     * panel es la PORTADA —una fila por espacio, con su cuenta— y con un
+     * espacio elegido se enseña solo su subárbol. Todo lo que parte del panel
+     * (flechas, ⌘N, buscador, arrastre) queda acotado a él: el ruido de los
+     * demás proyectos no existe mientras trabajas en uno.
+     *
+     * Cambiar de espacio limpia lo que era de la vista anterior: carpetas
+     * abiertas, cursor y lote. Un cursor apuntando a una carpeta que ya no se
+     * ve es exactamente la fila invisible que `aPlegar` se cuida de no dejar.
+     */
+    var espacio: String? {
+        didSet {
+            guard oldValue != espacio else { return }
+            expandidas = []; ordenAbiertas = []; marcadas = []; ancla = nil
+            foco = nil
+            reconstruir()
+        }
+    }
+    /// Entrar a un espacio (`id`) o volver a la portada (`nil`).
+    var alElegirEspacio: ((String?) -> Void)?
+    /// Las carpetas que el panel enseña AHORA: el subárbol del espacio activo.
+    var carpetasVisibles: [Carpeta] { Self.carpetasDe(carpetas, espacio: espacio) }
+    /// Los lienzos que el panel enseña AHORA.
+    var paginasVisibles: [ResumenPagina] { Self.paginasDe(paginas, carpetas, espacio: espacio) }
     var alElegir: ((String) -> Void)?
     var alCrearPagina: ((String?) -> Void)?
     var alCrearCarpeta: ((String?) -> Void)?
@@ -261,18 +291,24 @@ final class Lateral: NSView {
         // crear un lienzo exige buscar donde, se crean menos lienzos. Y nace
         // en la carpeta ABIERTA, no en la raíz (ver `carpetaContexto`).
         masPagina.globo = "Lienzo nuevo  ⌘N"
-        masPagina.alPulsar = { [weak self] in self?.alCrearPagina?(self?.carpetaContexto) }
+        // Sin carpeta abierta, el lienzo nace en la RAÍZ DEL ESPACIO, no
+        // huérfano: en la portada el botón no se enseña (no hay dónde nacer).
+        masPagina.alPulsar = { [weak self] in
+            guard let self else { return }
+            self.alCrearPagina?(self.carpetaContexto ?? self.espacio)
+        }
         masCarpeta.globo = "Carpeta nueva  ⌘⇧N"
         masCarpeta.alPulsar = { [weak self] in
             guard let self else { return }
-            // Dentro de la carpeta abierta SOLO si es de primer nivel: una
+            // En la portada crea un ESPACIO (carpeta raíz); dentro de uno, una
+            // subcarpeta suya. Nunca una carpeta dentro de una subcarpeta: una
             // subcarpeta dentro de otra sería el tercer nivel, y son dos.
-            let ctx = self.carpetaContexto.flatMap { id in
-                self.carpetas.first { $0.id == id }?.madre == nil ? id : nil
-            }
-            self.alCrearCarpeta?(ctx)
+            self.alCrearCarpeta?(self.espacio)
         }
         addSubview(masPagina); addSubview(masCarpeta)
+        // El rótulo es el camino de VUELTA: dentro de un espacio dice
+        // "‹ ESPACIOS" y pulsarlo regresa a la portada.
+        titulo.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(pulsarTitulo)))
 
         buscador.alTeclear = { [weak self] t in
             self?.filtro = t.lowercased()
@@ -509,8 +545,7 @@ final class Lateral: NSView {
         layer?.backgroundColor = NSColor.clear.cgColor
         filo.wantsLayer = true
         filo.layer?.backgroundColor = tema.filoCromo.cgColor
-        titulo.attributedStringValue = NSAttributedString(string: "LIENZOS", attributes: [
-            .font: Estilo.mono(9.5, 700), .foregroundColor: tema.pieTexto, .kern: 1.6])
+        pintarTitulo()
         buscador.tema = tema
         masPagina.tema = tema; masCarpeta.tema = tema
         agarre.tema = tema
@@ -573,9 +608,10 @@ final class Lateral: NSView {
      * las raices, las subcarpetas serian invisibles al teclado aunque estén
      * ahi delante.
      */
-    static func carpetasEnOrden(_ carpetas: [Carpeta]) -> [Carpeta] {
+    static func carpetasEnOrden(_ carpetas: [Carpeta], raiz: String? = nil) -> [Carpeta] {
         var fila: [Carpeta] = []
-        for madre in carpetas.filter({ $0.madre == nil }).sorted(by: { porNombre($0.nombre, $1.nombre) }) {
+        // `raiz` es el espacio: dentro de uno, las "madres" son sus hijas directas.
+        for madre in carpetas.filter({ $0.madre == raiz }).sorted(by: { porNombre($0.nombre, $1.nombre) }) {
             fila.append(madre)
             fila += carpetas.filter { $0.madre == madre.id }.sorted { porNombre($0.nombre, $1.nombre) }
         }
@@ -612,8 +648,8 @@ final class Lateral: NSView {
 
     /// La carpeta anterior (-1) o siguiente (+1). Se queda en los extremos: sin
     /// vuelta, igual que los lienzos.
-    static func carpetaVecina(_ carpetas: [Carpeta], de actual: String?, paso: Int) -> String? {
-        let f = carpetasEnOrden(carpetas)
+    static func carpetaVecina(_ carpetas: [Carpeta], raiz: String? = nil, de actual: String?, paso: Int) -> String? {
+        let f = carpetasEnOrden(carpetas, raiz: raiz)
         guard !f.isEmpty else { return nil }
         // Sin foco todavia, la primera flecha aterriza en la primera carpeta
         // en vez de no hacer nada: pulsar y que no pase nada se lee como que
@@ -647,57 +683,51 @@ final class Lateral: NSView {
         return v.indices.contains(j) ? v[j].id : nil
     }
 
+    // ── espacios (lógica pura, con pruebas en EspaciosTests) ────────────────
+
+    /// La carpeta RAÍZ de la que cuelga una carpeta (ella misma si ya es raíz).
+    /// `nil` si no hay carpeta o no se conoce: eso es un lienzo huérfano.
+    static func raizDe(_ carpetas: [Carpeta], carpeta: String?) -> String? {
+        guard var id = carpeta else { return nil }
+        let madreDe = Dictionary(uniqueKeysWithValues: carpetas.map { ($0.id, $0.madre) })
+        guard madreDe[id] != nil else { return nil }
+        // Acotado: un ciclo en `parent_id` (la BD no lo impide) no puede colgar la app.
+        var pasos = 0
+        while let m = madreDe[id] ?? nil, pasos < 16 { id = m; pasos += 1 }
+        return id
+    }
+
+    /// El subárbol de carpetas de un espacio, sin la raíz. En la portada, ninguna.
+    static func carpetasDe(_ carpetas: [Carpeta], espacio: String?) -> [Carpeta] {
+        guard let espacio else { return [] }
+        return carpetas.filter { $0.id != espacio && raizDe(carpetas, carpeta: $0.id) == espacio }
+    }
+
+    /// Los lienzos de un espacio (raíz y subcarpetas). En la portada, los
+    /// HUÉRFANOS: los que no cuelgan de ninguna carpeta conocida. Se enseñan
+    /// ahí para que no se pierdan (así se perdió una página el 20 ago), no
+    /// para estorbar dentro de un espacio.
+    static func paginasDe(_ paginas: [ResumenPagina], _ carpetas: [Carpeta], espacio: String?) -> [ResumenPagina] {
+        paginas.filter { raizDe(carpetas, carpeta: $0.folderId) == espacio }
+    }
+
+    /// Los espacios en el orden de la portada, cada uno con cuántos lienzos tiene.
+    static func espacios(_ carpetas: [Carpeta], _ paginas: [ResumenPagina]) -> [(carpeta: Carpeta, cuenta: Int)] {
+        carpetas.filter { $0.madre == nil }.sorted { porNombre($0.nombre, $1.nombre) }
+            .map { ($0, paginasDe(paginas, carpetas, espacio: $0.id).count) }
+    }
+
     static func porNombre(_ a: String, _ b: String) -> Bool {
         a.localizedStandardCompare(b) == .orderedAscending
     }
 
     private func reconstruir() {
         pila.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let visibles = paginas.filter(coinciden)
-        let nombres = Dictionary(uniqueKeysWithValues: carpetas.map { ($0.id, $0.nombre) })
-
-        /*
-         * DOS NIVELES, NI UNO MAS.
-         *
-         * Daniel: *"quiero poder guardar carpetas dentro de carpetas, solo un
-         * nivel de profundidad, no necesito más"*. El limite es una decision de
-         * diseño, no una carencia: con tres niveles ya hay que RECORDAR donde
-         * guardaste algo, y una lista que exige memoria deja de ser un indice.
-         *
-         * Lo impone la app (la columna `parent_id` aceptaria cadenas): una
-         * carpeta que YA es hija no ofrece diana de soltado, y una que tiene
-         * hijas no se puede meter en otra.
-         */
-        func ramaDe(_ c: Carpeta, sangria: CGFloat) {
-            let hijas = visibles.filter { $0.folderId == c.id }.sorted { Self.porNombre($0.nombre, $1.nombre) }
-            let subs = carpetas.filter { $0.madre == c.id }.sorted { Self.porNombre($0.nombre, $1.nombre) }
-            // Con un filtro activo, una carpeta sin resultados no se enseña:
-            // buscar y ver diez carpetas vacías es peor que no buscar.
-            if !filtro.isEmpty && hijas.isEmpty && subs.isEmpty { return }
-            let abierta = expandidas.contains(c.id) || !filtro.isEmpty
-            pila.addArrangedSubview(filaCarpeta(c, abierta: abierta, sangria: sangria))
-            guard abierta else { return }
-            // Las SUBCARPETAS van primero: son contenedores, y un contenedor
-            // enterrado bajo veinte páginas no se encuentra.
-            for sub in subs { ramaDe(sub, sangria: sangria + 16) }
-            for p in hijas { pila.addArrangedSubview(filaPagina(p, sangria: sangria + 18)) }
-            if hijas.isEmpty && subs.isEmpty {
-                pila.addArrangedSubview(etiqueta("vacía", sangria: sangria + 22))
-            }
-        }
-        for c in carpetas.filter({ $0.madre == nil }).sorted(by: { Self.porNombre($0.nombre, $1.nombre) }) {
-            ramaDe(c, sangria: 0)
-        }
-
-        let sueltas = visibles.filter { $0.folderId == nil || nombres[$0.folderId!] == nil }
-            .sorted { Self.porNombre($0.nombre, $1.nombre) }
-        if !sueltas.isEmpty {
-            pila.addArrangedSubview(rotulo("SIN CARPETA", cuenta: sueltas.count))
-            for p in sueltas { pila.addArrangedSubview(filaPagina(p, sangria: 6)) }
-        }
-        if visibles.isEmpty {
-            pila.addArrangedSubview(etiqueta(filtro.isEmpty ? "Todavía no hay lienzos." : "Nada con ese nombre.", sangria: 10))
-        }
+        // Un espacio que ya no existe (se borró la carpeta) devuelve a la portada.
+        if let e = espacio, !carpetas.contains(where: { $0.id == e }) { espacio = nil; return }
+        pintarTitulo()
+        masPagina.isHidden = espacio == nil
+        if let e = espacio { arbol(de: e) } else { portada() }
         // El espaciador se come el sobrante y deja el árbol pegado arriba.
         let cola = NSView()
         cola.translatesAutoresizingMaskIntoConstraints = false
@@ -718,6 +748,123 @@ final class Lateral: NSView {
         scroll.reflectScrolledClipView(scroll.contentView)
     }
 
+    /// LA PORTADA: una fila por espacio. Y con algo escrito en el buscador,
+    /// busca en TODO: es la única vista desde la que se ve el conjunto.
+    private func portada() {
+        if !filtro.isEmpty {
+            let hallados = paginas.filter(coinciden).sorted { Self.porNombre($0.nombre, $1.nombre) }
+            for p in hallados { pila.addArrangedSubview(filaPagina(p, sangria: 6)) }
+            if hallados.isEmpty { pila.addArrangedSubview(etiqueta("Nada con ese nombre.", sangria: 10)) }
+            return
+        }
+        let lista = Self.espacios(carpetas, paginas)
+        for (c, n) in lista { pila.addArrangedSubview(filaEspacio(c, cuenta: n)) }
+        if lista.isEmpty { pila.addArrangedSubview(etiqueta("Todavía no hay espacios.", sangria: 10)) }
+        let sueltas = Self.paginasDe(paginas, carpetas, espacio: nil).sorted { Self.porNombre($0.nombre, $1.nombre) }
+        if !sueltas.isEmpty {
+            pila.addArrangedSubview(rotulo("SIN ESPACIO", cuenta: sueltas.count))
+            for p in sueltas { pila.addArrangedSubview(filaPagina(p, sangria: 6)) }
+        }
+    }
+
+    /// EL ÁRBOL DE UN ESPACIO: su nombre arriba (que es también la diana para
+    /// SACAR un lienzo de una subcarpeta), sus subcarpetas y sus lienzos sueltos.
+    private func arbol(de e: String) {
+        let visibles = paginasVisibles.filter(coinciden)
+        let nombre = carpetas.first { $0.id == e }?.nombre ?? "?"
+        pila.addArrangedSubview(rotulo(nombre.uppercased(), cuenta: visibles.count, destino: .carpeta(e)))
+        let subs = carpetas.filter { $0.madre == e }.sorted { Self.porNombre($0.nombre, $1.nombre) }
+        // Las SUBCARPETAS van primero: son contenedores, y un contenedor
+        // enterrado bajo veinte páginas no se encuentra.
+        for c in subs { ramaDe(c, sangria: 0, visibles: visibles) }
+        let sueltas = visibles.filter { $0.folderId == e }.sorted { Self.porNombre($0.nombre, $1.nombre) }
+        for p in sueltas { pila.addArrangedSubview(filaPagina(p, sangria: 6)) }
+        if visibles.isEmpty {
+            pila.addArrangedSubview(etiqueta(filtro.isEmpty ? "Todavía no hay lienzos aquí." : "Nada con ese nombre.", sangria: 10))
+        }
+    }
+
+    /*
+     * DOS NIVELES, NI UNO MAS.
+     *
+     * Daniel: *"quiero poder guardar carpetas dentro de carpetas, solo un
+     * nivel de profundidad, no necesito más"*. El limite es una decision de
+     * diseño, no una carencia: con tres niveles ya hay que RECORDAR donde
+     * guardaste algo, y una lista que exige memoria deja de ser un indice.
+     * Con los espacios, el nivel 1 es el espacio y el 2 sus subcarpetas.
+     *
+     * Lo impone la app (la columna `parent_id` aceptaria cadenas): una
+     * carpeta que YA es hija no ofrece "carpeta dentro". Si la BD trae un
+     * tercer nivel (se creo por REST), se pinta igual — esconderlo seria
+     * perder lienzos — pero no se puede crear desde aqui.
+     */
+    private func ramaDe(_ c: Carpeta, sangria: CGFloat, visibles: [ResumenPagina]) {
+        let hijas = visibles.filter { $0.folderId == c.id }.sorted { Self.porNombre($0.nombre, $1.nombre) }
+        let subs = carpetas.filter { $0.madre == c.id }.sorted { Self.porNombre($0.nombre, $1.nombre) }
+        // Con un filtro activo, una carpeta sin resultados no se enseña:
+        // buscar y ver diez carpetas vacías es peor que no buscar.
+        if !filtro.isEmpty && hijas.isEmpty && subs.isEmpty { return }
+        let abierta = expandidas.contains(c.id) || !filtro.isEmpty
+        pila.addArrangedSubview(filaCarpeta(c, abierta: abierta, sangria: sangria))
+        guard abierta else { return }
+        for sub in subs { ramaDe(sub, sangria: sangria + 16, visibles: visibles) }
+        for p in hijas { pila.addArrangedSubview(filaPagina(p, sangria: sangria + 18)) }
+        if hijas.isEmpty && subs.isEmpty {
+            pila.addArrangedSubview(etiqueta("vacía", sangria: sangria + 22))
+        }
+    }
+
+    /// Una fila de la portada: el espacio, con su cuenta en mono a la derecha.
+    /// Pulsar ENTRA. Es diana de soltado para meterle un lienzo huérfano.
+    private func filaEspacio(_ c: Carpeta, cuenta: Int) -> NSView {
+        let v = FilaPulsable(alto: 36, tema: tema, activa: foco == c.id)
+        v.destino = .carpeta(c.id)
+        v.alPulsar = { [weak self] in self?.alElegirEspacio?(c.id) }
+        let ic = NSImageView(image: Estilo.iconoBisel(Icono.carpeta, tema))
+        ic.frame = NSRect(x: 12, y: 9, width: 18, height: 18)
+        v.addSubview(ic)
+        let t = NSTextField(labelWithString: c.nombre)
+        t.font = Estilo.fuente(13.5, 600); t.textColor = tema.tituloTexto
+        t.lineBreakMode = .byTruncatingMiddle
+        t.frame = NSRect(x: 38, y: 9, width: v.frame.width - 38 - 52, height: 18)
+        v.addSubview(t)
+        // La cuenta en mono: es cromo (un dato), no contenido.
+        let n = NSTextField(labelWithString: "\(cuenta)")
+        n.attributedStringValue = NSAttributedString(string: "\(cuenta)", attributes: [
+            .font: Estilo.mono(10, 600), .foregroundColor: tema.pieTexto, .kern: 0.6])
+        n.alignment = .right
+        n.frame = NSRect(x: v.frame.width - 46, y: 11, width: 34, height: 14)
+        v.addSubview(n)
+        v.alRenombrar = { [weak self] in
+            self?.editarNombre(en: v, x: 38, actual: c.nombre) { nuevo in
+                self?.alRenombrarCarpeta?(c.id, nuevo)
+            }
+        }
+        v.alMenu = { [weak self] in
+            guard let self else { return }
+            self.menu([
+                ("Entrar", false, { self.alElegirEspacio?(c.id) }),
+                ("Lienzo nuevo aquí", false, { self.alCrearPagina?(c.id) }),
+                ("Carpeta dentro", false, { self.alCrearCarpeta?(c.id) }),
+                ("Renombrar  ·  doble clic", false, { v.alRenombrar?() }),
+                ("Borrar espacio…", true, { self.alBorrarCarpeta?(c.id) }),
+            ])
+        }
+        return v
+    }
+
+    @objc private func pulsarTitulo() {
+        guard espacio != nil else { return }
+        alElegirEspacio?(nil)
+    }
+
+    private func pintarTitulo() {
+        let texto = espacio == nil ? "ESPACIOS" : "‹ ESPACIOS"
+        titulo.attributedStringValue = NSAttributedString(string: texto, attributes: [
+            .font: Estilo.mono(9.5, 700),
+            .foregroundColor: espacio == nil ? tema.pieTexto : tema.acento, .kern: 1.6])
+    }
+
     // ── filas ───────────────────────────────────────────────────────────────
     private func caja(_ alto: CGFloat) -> NSView {
         let v = NSView(frame: NSRect(x: 0, y: 0, width: max(1, scroll.frame.width - 4), height: alto))
@@ -729,10 +876,12 @@ final class Lateral: NSView {
 
     private func filaCarpeta(_ c: Carpeta, abierta: Bool, sangria: CGFloat = 0) -> NSView {
         let v = FilaPulsable(alto: 30, tema: tema, activa: foco == c.id)
-        // Una carpeta que YA es hija no acepta nada dentro: seria el 2º nivel.
-        if c.madre == nil { v.destino = .carpeta(c.id) }
-        // Y se arrastra solo si NO tiene hijas, por la misma razon.
-        if !carpetas.contains(where: { $0.madre == c.id }) {
+        // Dentro de un espacio, sus subcarpetas SÍ reciben lienzos: son el
+        // último nivel, y el arrastre es como se mueve un lienzo aquí.
+        if c.madre == nil || c.madre == espacio { v.destino = .carpeta(c.id) }
+        // Una carpeta se arrastra a otra solo en la portada (anidar raíces) y
+        // solo si NO tiene hijas: lo contrario abriría un tercer nivel.
+        if espacio == nil, !carpetas.contains(where: { $0.madre == c.id }) {
             v.arrastrableCarpeta = c.id
             v.alArrastrar = { [weak self] id in self?.arrastrarCarpeta(id) }
         }
@@ -763,7 +912,9 @@ final class Lateral: NSView {
             // subcarpeta seria el tercer nivel, y son dos.
             if c.madre == nil {
                 filas.append(("Carpeta dentro", false, { self.alCrearCarpeta?(c.id) }))
-            } else {
+            } else if self.espacio == nil {
+                // Sacar una subcarpeta a la raíz la vuelve un ESPACIO; dentro de
+                // un espacio eso no tiene sentido y no se ofrece.
                 filas.append(("Sacar de la carpeta", false, { self.alAnidarCarpeta?(c.id, nil) }))
             }
             filas.append(("Renombrar  ·  doble clic", false, { v.alRenombrar?() }))
@@ -908,10 +1059,11 @@ final class Lateral: NSView {
         return v
     }
 
-    private func rotulo(_ s: String, cuenta: Int) -> NSView {
+    private func rotulo(_ s: String, cuenta: Int, destino: Destino = .raiz) -> NSView {
         let v = FilaPulsable(alto: 30, tema: tema)
         // SACAR de una carpeta tiene su propia diana, no "soltar en el vacio".
-        v.destino = .raiz
+        // Dentro de un espacio la diana es su raíz, no "sin carpeta".
+        v.destino = destino
         let t = NSTextField(labelWithString: s)
         t.attributedStringValue = NSAttributedString(string: s, attributes: [
             .font: Estilo.mono(9, 700), .foregroundColor: tema.pieTexto, .kern: 1.4])

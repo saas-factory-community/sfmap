@@ -30,9 +30,9 @@ final class Lienzo: NSView {
     /// Los diales de los MECANISMOS. También en memoria: mover la mano en
     /// cámara no puede escribir en `draw`. Ver `Mecanismo.swift`.
     let meca = Mecanismo.Estado()
-    var tema = Tema.claro { didSet { needsDisplay = true } }
+    var tema = Tema.claro { didSet { editor?.actualizarTema(tema); needsDisplay = true } }
     var fondo: Fondo = .puntos { didSet { needsDisplay = true } }
-    var camara = Camara() { didSet { needsDisplay = true; alMoverCamara?(camara.zoom) } }
+    var camara = Camara() { didSet { editor?.actualizarCamara(camara, viewport: bounds.size); needsDisplay = true; alMoverCamara?(camara.zoom) } }
     var herramienta: Herramienta = .seleccionar {
         didSet {
             guard herramienta != oldValue else { return }
@@ -97,7 +97,12 @@ final class Lienzo: NSView {
     /// Se toco el lienzo: lo que flote sobre el y no le pertenezca, se cierra.
     var alTocarLienzo: (() -> Void)?
     var alPedirMenu: ((NSPoint, Elemento?) -> Void)?
+    var documentosActivos = false
+    func permiteEnlace(_ liga: String?) -> Bool { DocumentosLienzo.permite(liga, activos: documentosActivos) }
     var alAbrirEnlace: ((String) -> Void)?
+    var alActivarHTML: ((String) -> Void)?
+    var alInspeccionar: ((Elemento) -> Void)?
+    private var enlaceAlSoltar: (id: String, liga: String)?
     /// Cerrar una tarea de Todoist desde su casilla. Lo cablea `main.swift`.
     var alCerrarTarea: ((String) -> Void)?
     /**
@@ -128,7 +133,7 @@ final class Lienzo: NSView {
     override func setFrameSize(_ nuevo: NSSize) {
         let cambio = nuevo != frame.size
         super.setFrameSize(nuevo)
-        if cambio { needsDisplay = true }
+        if cambio { editor?.actualizarCamara(camara, viewport: bounds.size); needsDisplay = true }
     }
 
     override init(frame: NSRect) {
@@ -282,6 +287,39 @@ final class Lienzo: NSView {
     // MARK: pintar
     // ════════════════════════════════════════════════════════════════════════
 
+    /// Cuántos elementos pintó el último fotograma (tras el recorte por viewport).
+    /// Renglones e imágenes que el nivel de detalle NO pintó en el último cuadro (sensor).
+    private(set) var omitidosUltimoCuadro = 0
+    private(set) var pintadosUltimoCuadro = 0
+
+    /// El rectángulo de MUNDO que la cámara enseña en una vista de `tamano`,
+    /// con `holgura` alrededor. Inversa exacta de `Pintor.aPantalla`.
+    static func rectMundo(camara: Camara, tamano: CGSize, holgura: Double) -> CGRect {
+        let w = tamano.width / camara.zoom, h = tamano.height / camara.zoom
+        return CGRect(x: camara.x - w / 2, y: camara.y - h / 2, width: w, height: h)
+            .insetBy(dx: -holgura, dy: -holgura)
+    }
+
+    /// ¿Este elemento toca la vista? Ante la duda (caja vacía, conector sin
+    /// puntos) se PINTA: un recorte que esconde algo real es peor que un
+    /// fotograma lento. ⚠️ `CGRect.intersects` descarta rectángulos vacíos
+    /// (lección del 20 ago): por eso las cajas de área cero pasan de largo.
+    static func tocaVista(_ e: Elemento, _ vista: CGRect) -> Bool {
+        if e.tipo == "connector" {
+            guard !e.ruta.isEmpty else { return true }
+            // La curva puede salir de la caja de sus extremos. Recortar por
+            // los puntos originales la haría desaparecer al acercarse.
+            return TrazoConector.camino(e).boundingBoxOfPath.insetBy(dx:-80,dy:-80).intersects(vista)
+        }
+        var r = e.cajaVisual
+        if r.width <= 0 || r.height <= 0 { return true }
+        if e.giro != 0 {
+            let d = hypot(r.width, r.height)
+            r = CGRect(x: r.midX - d / 2, y: r.midY - d / 2, width: d, height: d)
+        }
+        return r.insetBy(dx: -40, dy: -40).intersects(vista)
+    }
+
     override func draw(_ dirty: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         // AppKit puede entregar el contexto después de haber pintado una
@@ -311,9 +349,25 @@ final class Lienzo: NSView {
 
         // z ascendente, y los conectores por DEBAJO: una flecha por encima de
         // una tarjeta se lee como error aunque la geometría sea correcta.
-        let visibles = doc.elementos.sorted { $0.z < $1.z }
+        /*
+         * ⚡ RECORTE POR VIEWPORT (5 sep 2026). Lo que no toca la pantalla no se pinta.
+         *
+         * Medido con `--medir` en «El Ecosistema» (818 elementos, un solo lienzo):
+         * 130-190 ms por fotograma en RELEASE, porque cada cuadro pintaba los 818
+         * estuvieran o no a la vista. Un lienzo grande es justo el caso de uso de
+         * sfmap (el mapa entero de la empresa), así que el coste tiene que ser el
+         * de lo VISIBLE, no el del documento. La holgura cubre sombras, pies que
+         * cuelgan, títulos derramados y giros (un girado ocupa hasta su diagonal).
+         * `pintadosUltimoCuadro` es el sensor: la prueba cuenta, no supone.
+         */
+        let vista = Lienzo.rectMundo(camara: camara, tamano: bounds.size, holgura: 320)
+        var pintados = 0
+        Pintor.omitidosCuadro = 0
+        let visibles = doc.elementos.sorted { $0.z < $1.z }.filter { Lienzo.tocaVista($0, vista) }
+        pintados = visibles.count
         for e in visibles where e.tipo == "frame" { conCondena(ctx, e) { conGiro(ctx, e) { p.seccion(e) } } }
-        for e in visibles where e.tipo == "connector" { conCondena(ctx, e) { p.conector(e) } }
+        for e in visibles where e.tipo == "connector" { conCondena(ctx, e) { p.conector(e, conEtiqueta: false) } }
+        defer { pintadosUltimoCuadro = pintados; omitidosUltimoCuadro = Pintor.omitidosCuadro }
         for e in visibles {
             /*
              * ⚠️ MIENTRAS SE EDITA SE OCULTA EL TEXTO, NO LA FIGURA.
@@ -343,12 +397,24 @@ final class Lienzo: NSView {
                 case "table": p.tabla(e)
                 case "code":  p.codigo(e)
                 case "image": p.imagen(e) { [weak self] in self?.needsDisplay = true }
-                case "embed": p.embed(e)
+                case "embed":
+                    // La vista WebKit opaca ya dibuja esta pieza. Evitar pintar
+                    // también su captura debajo en cada fotograma de cámara.
+                    let cubierto = !enact.activo && subviews.contains {
+                        guard let html = $0 as? EmbedHTML else { return false }
+                        return !html.isHidden && html.elementoID == e.id && html.documento.estado == "listo"
+                    }
+                    if !cubierto { p.embed(e) }
                 default: break
                 }
             } }
             }
         }
+
+        // Los rótulos van encima del contenido, con búsqueda de aire. Las
+        // líneas siguen debajo: ninguna imagen puede tapar media etiqueta.
+        let obstaculosEtiqueta = visibles.filter { $0.tipo != "connector" && $0.tipo != "frame" && $0.rol != "drawn" }.map(\.cajaVisual)
+        for e in visibles where e.tipo == "connector" { p.etiquetaArista(e, obstaculos: obstaculosEtiqueta) }
 
         // ── superposiciones ─────────────────────────────────────────────────
         // EL VELO DEL RECORTE va ANTES que la selección: mientras se recorta,
@@ -360,7 +426,7 @@ final class Lienzo: NSView {
             // Las manijas solo con UN elemento o con la caja común: redimensionar
             // varios a la vez usa la caja de la unión, que es lo que Figma hace.
             if herramienta == .seleccionar, let r = cajaDeManijas() {
-                p.manijas(r)
+                p.manijas(r, texto: seleccionSoloTexto)
                 // Y la flechita de giro, si el puntero esta en una esquina.
                 // La condicion es TENER punto, no `punteroDentro`: esa bandera
                 // solo se enciende con `mouseEntered`, y el hover de los puertos
@@ -867,6 +933,17 @@ final class Lienzo: NSView {
         camara.y = r.midY - ((arriba - abajo) / 2) / camara.zoom
     }
 
+    @discardableResult
+    func enfocar(_ id: String) -> Bool {
+        guard doc.porId(id) != nil else { return false }
+        doc.seleccion=[id]
+        encuadrar()
+        doc.seleccion=[]
+        avisarSeleccion()
+        needsDisplay=true
+        return true
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     // MARK: puntero
     // ════════════════════════════════════════════════════════════════════════
@@ -970,17 +1047,22 @@ final class Lienzo: NSView {
     private func cursorParaPunto(_ w: CGPoint) {
         guard herramienta == .seleccionar else { return }
         if let caja = cajaDeManijas() {
-            if let h = Geo.manijaEn(caja, w, zoom: camara.zoom) {
+            if let h = Geo.manijaEn(caja, w, zoom: camara.zoom, texto: seleccionSoloTexto) {
                 if h == Geo.GIRO { NSCursor.giro.set(); return }
                 switch Geo.cursorDeManija(h) {
                 case .vertical: NSCursor.resizeUpDown.set()
                 case .horizontal: NSCursor.resizeLeftRight.set()
+                case .diagonalNWSE: NSCursor.redimensionNWSE.set()
+                case .diagonalNESW: NSCursor.redimensionNESW.set()
                 default: NSCursor.crosshair.set()
                 }
                 return
             }
         }
         if hover?.puerto != nil { NSCursor.crosshair.set(); return }
+        if let e = Geo.elegir(doc.elementos, w, zoom: camara.zoom), e.abreAlClic, permiteEnlace(e.enlace) {
+            NSCursor.pointingHand.set(); return
+        }
         NSCursor.arrow.set()
     }
 
@@ -1083,6 +1165,7 @@ final class Lienzo: NSView {
     }
 
     override func mouseDown(with e: NSEvent) {
+        enlaceAlSoltar = nil
         /*
          * TOCAR EL LIENZO CIERRA LO QUE FLOTA ENCIMA.
          *
@@ -1113,11 +1196,49 @@ final class Lienzo: NSView {
             gesto = .pan(p); NSCursor.closedHand.set(); return
         }
 
+        // Los agarres visibles ganan también a widgets, enlaces y embeds.
+        // Repetir un arrastre deprisa no debe convertirse en doble clic sobre el HTML.
+        if herramienta == .seleccionar, let caja = cajaDeManijas(),
+           let h = Geo.manijaEn(caja, w, zoom: camara.zoom, texto: seleccionSoloTexto) {
+            doc.abrirGesto()
+            if h == Geo.GIRO { gesto = .girar(w) }
+            else {
+                let previas = Dictionary(uniqueKeysWithValues:
+                    doc.seleccionados.filter { $0.tipo != "connector" && !$0.bloqueado }
+                        .map { ($0.id, $0.caja) })
+                gesto = .redimensionar(h, w, caja, previas)
+            }
+            return
+        }
+
+        if e.clickCount >= 2, herramienta == .seleccionar,
+           let el = Geo.elegir(doc.elementos, w, zoom: camara.zoom), EmbedHTML.ruta(el) != nil {
+            doc.seleccion = [el.id]
+            alActivarHTML?(el.id)
+            return
+        }
+
         // ⌘ + clic ABRE el enlace del elemento. La barra lo promete en su
         // propio texto de ayuda; prometerlo sin implementarlo es el pecado que
         // este lienzo persigue.
         if m.contains(.command), let el = Geo.elegir(doc.elementos, w, zoom: camara.zoom),
-           let liga = el.enlace ?? (el.tipo == "embed" ? el.crudo["url"]?.s : nil) {
+           let liga = el.enlace ?? (el.tipo == "embed" ? el.crudo["url"]?.s : nil), permiteEnlace(liga) {
+            alAbrirEnlace?(liga); return
+        }
+
+        /*
+         * DOBLE CLIC SOBRE UNA IMAGEN CON DESTINO LA ABRE (6 sep 2026).
+         *
+         * Una tarjeta de enlace —la miniatura de un video, la portada de un
+         * about, la vista previa de otro lienzo— se comporta como en Miro: un
+         * clic la selecciona, dos la abren. Solo imágenes, a propósito: en una
+         * caja el doble clic ya edita el texto, y un gesto con dos dueños es un
+         * gesto que falla la mitad de las veces. La marca y ⌘+clic siguen
+         * valiendo para todo lo demás.
+         */
+        if e.clickCount >= 2, herramienta == .seleccionar,
+           let el = Geo.elegir(doc.elementos, w, zoom: camara.zoom),
+           el.tipo == "image", !el.abreAlClic, !el.bloqueado, let liga = el.enlace, permiteEnlace(liga) {
             alAbrirEnlace?(liga); return
         }
 
@@ -1133,7 +1254,9 @@ final class Lienzo: NSView {
          */
         if !m.contains(.shift), herramienta == .seleccionar,
            let el = doc.elementos.reversed().first(where: {
-               guard $0.enlace != nil, !$0.bloqueado else { return false }
+               // El destino de clic completo espera mouseUp, incluso sobre
+               // su marca: empezar un arrastre ahí tampoco debe navegar.
+               guard permiteEnlace($0.enlace), !$0.bloqueado, !$0.abreAlClic else { return false }
                let c = Pintor.centroMarca($0, zoom: camara.zoom)
                let r = Pintor.radioMarca(camara.zoom)
                return hypot(w.x - c.x, w.y - c.y) <= r + 2 / camara.zoom
@@ -1202,6 +1325,17 @@ final class Lienzo: NSView {
            let v = Pintor.vistaEn(el, w) {
             VistaCalendario.elegida = v
             needsDisplay = true
+            return
+        }
+
+        if !m.contains(.shift), herramienta == .seleccionar,
+           let el = doc.elementos.reversed().first(where: {$0.crudo["widget"]?["tipo"]?.s == "tareas" && $0.caja.contains(w)}),
+           let accion = VistaTareas.controles.first(where: {$0.1.contains(w)})?.0 {
+            _ = el
+            if let vista=VistaTareas(rawValue:accion) {VistaTareas.elegida=vista}
+            else if accion == "hechos" {VistaTareas.hechosAbiertos.toggle()}
+            else {VistaTareas.backlogAbierto.toggle()}
+            needsDisplay=true
             return
         }
 
@@ -1286,16 +1420,6 @@ final class Lienzo: NSView {
         //   2. puerto (vive fuera del borde, así que rara vez compite)
         //   3. elemento → arrastrar
         //   4. vacío → marquesina
-        if let caja = cajaDeManijas(), let h = Geo.manijaEn(caja, w, zoom: camara.zoom) {
-            doc.abrirGesto()
-            if h == Geo.GIRO { gesto = .girar(w) }
-            else {
-                let previas = Dictionary(uniqueKeysWithValues:
-                    doc.seleccionados.filter { $0.tipo != "connector" }.map { ($0.id, $0.caja) })
-                gesto = .redimensionar(h, w, caja, previas)
-            }
-            return
-        }
         /*
          * REENGANCHAR un extremo. Va ANTES que el PUERTO, que el codo y que el
          * arrastre del cuerpo.
@@ -1341,6 +1465,10 @@ final class Lienzo: NSView {
         }
 
         if let el = Geo.elegir(doc.elementos, w, zoom: camara.zoom) {
+            if el.abreAlClic, let liga=el.enlace, permiteEnlace(liga), e.clickCount < 2,
+               !m.contains(.shift), !m.contains(.option), doc.seleccion.count <= 1 {
+                enlaceAlSoltar=(el.id,liga)
+            }
             /* DOBLE CLIC: se resuelve AL SOLTAR, jamás al presionar.
              *
              * Resolverlo en el `down` hacía que "clic para seleccionar y
@@ -1411,7 +1539,9 @@ final class Lienzo: NSView {
                 needsDisplay = true
             }
 
-        case .arrastre(let inicio, let ultimo, _, let activa):
+        case .arrastre(let inicio, let ultimo, let movio, let activa):
+            if enlaceAlSoltar != nil, !movio,
+               hypot(w.x-inicio.x,w.y-inicio.y)*camara.zoom < 4 { return }
             var dx = w.x - ultimo.x, dy = w.y - ultimo.y
             guard dx != 0 || dy != 0 else { return }
             // IMANTADO: la mano suelta donde quiere y el lienzo hace el último
@@ -1539,6 +1669,7 @@ final class Lienzo: NSView {
     }
 
     override func mouseUp(with e: NSEvent) {
+        defer { enlaceAlSoltar=nil }
         let w = aMundo(convert(e.locationInWindow, from: nil))
         guias = []
         if recorte != nil {
@@ -1564,6 +1695,14 @@ final class Lienzo: NSView {
                 doc.cerrarGesto("mover")
             } else {
                 doc.cerrarGesto("mover")
+                if let nav=enlaceAlSoltar, permiteEnlace(nav.liga),
+                   Geo.elegir(doc.elementos,w,zoom:camara.zoom)?.id == nav.id,
+                   !e.modifierFlags.contains(.shift), !e.modifierFlags.contains(.option) {
+                    alAbrirEnlace?(nav.liga)
+                    return
+                }
+                if let el=doc.seleccionados.first, el.tipo == "connector",
+                   el.crudo["relation"] != nil, documentosActivos { alInspeccionar?(el); return }
                 /*
                  * UN WIDGET PULSADO ABRE SU APP (enmienda del 25 ago).
                  *
@@ -1583,15 +1722,24 @@ final class Lienzo: NSView {
                  * evento, y solo el final los distingue. Misma razón por la que
                  * un botón de verdad se dispara al soltar.
                  */
-                if activa, let el = doc.elementos.first(where: { $0.id == doc.seleccion.first }),
-                   el.rol == "widget", let liga = el.enlace {
-                    alAbrirEnlace?(liga)
+                if let el = doc.elementos.first(where: { $0.id == doc.seleccion.first }),
+                   el.rol == "widget", let liga = el.enlace, permiteEnlace(liga) {
+                    let tipo = el.crudo["widget"]?["tipo"]?.s
+                    let destino: String
+                    switch tipo {
+                    case "calendario": destino = "app:sfcal?vista=" + VistaCalendario.elegida.vistaSFCal
+                    case "monk": destino = "app:sfcal?vista=monkMode"
+                    case "tareas": destino = "app:sfcal?vista=tasks"
+                    default: destino = liga
+                    }
+                    alAbrirEnlace?(destino)
                     return
                 }
                 // Doble toque = dos clics QUIETOS. Si el segundo arrastró, era
                 // un arrastre, y activar ahora abriría un editor sobre algo
                 // recién movido.
-                if activa, let id = doc.seleccion.first { editarTexto(id) }
+                if activa, let id = doc.seleccion.first, let el = doc.porId(id),
+                   !el.abreAlClic || !permiteEnlace(el.enlace) { editarTexto(id) }
             }
 
         case .marco(let a, let b):
@@ -1700,9 +1848,15 @@ final class Lienzo: NSView {
      * Tampoco con algo BLOQUEADO en la selección: unas manijas que no mueven
      * nada son una promesa.
      */
+    private var seleccionSoloTexto: Bool {
+        !doc.seleccion.isEmpty && doc.seleccionados.allSatisfy { $0.tipo == "text" }
+    }
+
     private func cajaDeManijas() -> CGRect? {
         let sel = doc.seleccionados.filter { $0.tipo != "connector" }
-        guard !sel.isEmpty, !sel.contains(where: { $0.bloqueado }) else { return nil }
+        // El bloqueo protege ese elemento, no inutiliza los demás seleccionados.
+        // El arrastre ya omite los bloqueados; su marco sigue siendo la referencia.
+        guard !sel.isEmpty, sel.contains(where: { !$0.bloqueado }) else { return nil }
         var caja = sel[0].cajaVisual
         for e in sel.dropFirst() { caja = caja.union(e.cajaVisual) }
         return caja
@@ -2071,7 +2225,12 @@ final class Lienzo: NSView {
         cerrarEditor(guardando: true)
         let ed = EditorTexto(elemento: e, tema: tema, camara: camara, viewport: bounds.size,
                              guardar: { [weak self] t in self?.guardarTexto(id, t) },
-                             cancelar: { [weak self] in self?.editor = nil; self?.needsDisplay = true })
+                             cancelar: { [weak self] in
+                                 guard let self else { return }
+                                 self.editor = nil
+                                 self.window?.makeFirstResponder(self)
+                                 self.needsDisplay = true
+                             })
         // El editor vive en la VENTANA, no dentro del lienzo: dentro heredaría
         // el volteo de la vista y el texto saldría del revés.
         superview?.addSubview(ed)
@@ -2083,6 +2242,9 @@ final class Lienzo: NSView {
 
     private func guardarTexto(_ id: String, _ texto: String) {
         editor = nil
+        // El NSTextView ya salió de la jerarquía: el siguiente Suprimir,
+        // Enter o atajo debe llegar al lienzo, no a un editor retirado.
+        window?.makeFirstResponder(self)
         doc.editar("escribir") { els in
             guard let i = els.firstIndex(where: { $0.id == id }) else { return }
             els[i].escribir(texto)
@@ -2093,12 +2255,18 @@ final class Lienzo: NSView {
     func cerrarEditor(guardando: Bool) {
         guard let ed = editor else { return }
         editor = nil
-        guardando ? ed.cerrarPorFoco() : ed.removeFromSuperview()
+        if guardando { ed.cerrarPorFoco() }
+        else { ed.removeFromSuperview(); window?.makeFirstResponder(self) }
     }
 
     // ════════════════════════════════════════════════════════════════════════
     // MARK: teclado
     // ════════════════════════════════════════════════════════════════════════
+
+    override func selectAll(_ sender: Any?) {
+        doc.seleccion = Set(doc.elementos.map(\.id))
+        avisarSeleccion()
+    }
 
     override func flagsChanged(with e: NSEvent) { super.flagsChanged(with: e) }
 
@@ -2438,25 +2606,11 @@ final class Lienzo: NSView {
 
     func pegarDesdeMenu() { pegar() }
 
-    /**
-     * DONDE VIVE UNA IMAGEN PEGADA.
-     *
-     * El lienzo viaja (esta en Supabase, se abre desde cualquier Mac) pero la
-     * imagen NO viaja con el: el elemento guarda una RUTA. Asi que la ruta
-     * tiene que ser una que exista igual en las tres maquinas, y la unica que
-     * cumple eso es una dentro del repo, que va por git.
-     *
-     * Es la misma convencion que ya usan las evidencias de The Machinery: el
-     * generador expande sus `src` relativos a `~/Developer/business-os/...`.
-     * Aqui no se inventa nada, se sigue.
-     *
-     * ⚠️ Y el precio, dicho: hasta que el PNG este commiteado, en las OTRAS
-     * Macs el lienzo enseña un marco de espera donde va la imagen. Una imagen
-     * pegada es un archivo nuevo sin versionar, como cualquier otro.
-     */
+    /// Las imágenes pegadas viven en Application Support. Exportar .sfmap las
+    /// incluye en el documento para que otra persona no dependa de esta ruta.
     private static var carpetaPegadas: URL? {
         let f = FileManager.default
-        var d = URL(fileURLWithPath: NSString(string: "~/Developer/business-os/.claude/sfmap/imagenes")
+        var d = URL(fileURLWithPath: NSString(string: "~/Library/Application Support/sfmap/Imagenes")
             .expandingTildeInPath)
         // Por mes: una sola carpeta con trescientas capturas deja de ser
         // navegable, y encontrarlas a mano es justo lo que se hace cuando algo

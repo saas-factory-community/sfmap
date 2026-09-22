@@ -323,6 +323,9 @@ extension Pintor {
     /// Un mapa que se opera a diario no puede pedirle al ojo que adivine.
     func marcaDestino(_ e: Elemento) {
         guard let m = Enlace.marca(e.enlace) else { return }
+        // En panorama, la imagen ya es el destino. Un sello de tamaño fijo
+        // tapa la evidencia diminuta. Al acercarse vuelve la pista visual.
+        if e.abreAlClic, min(e.ancho, e.alto) * camara.zoom < 90 { return }
         let r = Pintor.radioMarca(camara.zoom)
         let c = Pintor.centroMarca(e, zoom: camara.zoom)
         let s = r * 0.44

@@ -11,8 +11,8 @@ import AppKit
 final class EnlaceTests: XCTestCase {
 
     func testLosCuatroDestinos() {
-        XCTAssertEqual(Enlace.leer("doc:docs/business-os/MAPA-FUENTES-DE-VERDAD.md"),
-                       .documento("docs/business-os/MAPA-FUENTES-DE-VERDAD.md"))
+        XCTAssertEqual(Enlace.leer("doc:docs/ejemplo.md"),
+                       .documento("docs/ejemplo.md"))
         XCTAssertEqual(Enlace.leer("page:83a103ab-cbe8-4257-bca2-52e8cd912528"),
                        .pagina("83a103ab-cbe8-4257-bca2-52e8cd912528"))
         XCTAssertEqual(Enlace.leer("https://youtu.be/abc"), .video(URL(string: "https://youtu.be/abc")!))
@@ -56,14 +56,10 @@ final class EnlaceTests: XCTestCase {
         XCTAssertNil(Enlace.marca(nil))
     }
 
-    /// La raíz del repo se BUSCA por marca en disco. Una constante habría
-    /// funcionado en desarrollo y no dentro del .app, o al revés.
-    func testLaRaizDelRepoTieneSusMarcas() throws {
-        let fm = FileManager.default
-        try XCTSkipUnless(fm.fileExists(atPath: Enlace.repo.path), "sin repo a la vista")
-        XCTAssertTrue(fm.fileExists(atPath: Enlace.repo.appendingPathComponent("CLAUDE.md").path))
+    func testDocumentoSeResuelveDentroDeLaBibliotecaConfigurada() {
         XCTAssertEqual(Enlace.rutaDoc("a/b.md").path, Enlace.repo.appendingPathComponent("a/b.md").path)
     }
+
 }
 
 final class MarkdownTests: XCTestCase {
@@ -282,6 +278,16 @@ final class SensorTests: XCTestCase {
 
 /// LA ITERACION 2: la capa de EVIDENCIA y el pulido de MARCA (25 ago 2026).
 final class EvidenciaYMarcaTests: XCTestCase {
+    private var raizAnterior: URL!
+    override func setUpWithError() throws {
+        raizAnterior = Enlace.repo
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sfmap-doc-test-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        Enlace.repo = dir
+        try "# Documento de prueba\n\nCorto.\n\nUn párrafo de tamaño medio.\n\nEsta línea contiene más palabras para verificar que la miniatura conserva longitudes diferentes.\n\nOtro texto.\n\nFin de la prueba.\n".write(to: dir.appendingPathComponent("CLAUDE.md"), atomically: true, encoding: .utf8)
+    }
+    override func tearDown() { Enlace.repo = raizAnterior; super.tearDown() }
+
 
     private func figura(_ campos: [String: Json]) -> Elemento {
         var o: [String: Json] = [

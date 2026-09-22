@@ -43,6 +43,14 @@ enum Cronometro {
             win.contentView = l
             l.doc.cargar(els)
             l.encuadrar()
+            // `--zoom <z>`: medir a la escala de TRABAJO, no encuadrado. Con el recorte por
+            // viewport (5 sep 2026) el coste depende de lo visible, y encuadrar un lienzo de
+            // 800 elementos mide el peor caso, no el fotograma de un arrastre real.
+            if let i = CommandLine.arguments.firstIndex(of: "--zoom"), i + 1 < CommandLine.arguments.count,
+               let z = Double(CommandLine.arguments[i + 1]), z > 0 {
+                l.camara.zoom = z
+                print(String(format: "MEDIR zoom fijado en %.2f (cámara centrada en el encuadre)", z))
+            }
 
             // 1 · PINTAR. Lo que cuesta un fotograma entero del lienzo.
             guard let rep = l.bitmapImageRepForCachingDisplay(in: l.bounds) else { return }

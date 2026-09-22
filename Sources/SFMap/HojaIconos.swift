@@ -45,6 +45,7 @@ enum HojaIconos {
         ("cursiva", Icono.cursiva),
         ("cursor", Icono.cursor),
         ("descargar", Icono.descargar),
+        ("documentos", Icono.documentos),
         ("deshacer", Icono.deshacer),
         ("destello", Icono.destello),
         ("duplicar", Icono.duplicar),

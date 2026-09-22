@@ -48,6 +48,49 @@ struct Pintor {
     /// TEXTO (CoreText rehace la maqueta en cada pintado).
     static var sinTexto = false
 
+    /*
+     * ⚡ NIVEL DE DETALLE (5 sep 2026). De lejos, un renglón de 20 pt mide UN píxel:
+     * componerlo con CoreText cuesta lo mismo que de cerca y nadie lo lee. Bajo
+     * `lodTextoPx` (píxeles de PANTALLA por tamaño de letra) el renglón se pinta
+     * como una barra tenue de su ancho —la silueta del párrafo sobrevive, el
+     * coste no—. Medido en «El Ecosistema» (900 elementos, zoom 0.06): el
+     * fotograma de vista general era el único que seguía lento tras el recorte
+     * por viewport, porque a ese zoom TODO está a la vista.
+     *
+     * `sinLOD` lo apagan `--export` y `--foto`: un PNG se mira de cerca aunque
+     * se pinte con la cámara lejos. `omitidosCuadro` es el sensor: la prueba
+     * cuenta renglones omitidos, no supone.
+     */
+    static var lodTextoPx: Double = 2.6
+    static var lodImagenPx: Double = 28
+    static var sinLOD = false
+    static var omitidosCuadro = 0
+
+    /// ¿Se lee un renglón de este tamaño con esta cámara?
+    func legible(_ tamano: Double) -> Bool {
+        Pintor.sinLOD || tamano * camara.zoom >= Pintor.lodTextoPx
+    }
+
+    /// La silueta de un párrafo que no se lee: una barra por renglón, al ancho
+    /// aproximado del texto, con el color del texto muy atenuado.
+    private func silueta(_ lineas: [String], x izq: Double, y arriba: Double, ancho: Double,
+                         lineH: Double, tamano: Double, color: NSColor, alinea: String) {
+        Pintor.omitidosCuadro += lineas.count
+        ctx.saveGState()
+        ctx.setFillColor(color.withAlphaComponent(0.28).cgColor)
+        for (i, linea) in lineas.enumerated() {
+            let w = min(ancho, Double(linea.count) * tamano * 0.52)
+            let x: Double = switch alinea {
+                case "center": izq + (ancho - w) / 2
+                case "right":  izq + ancho - w
+                default:       izq
+            }
+            ctx.fill(CGRect(x: x, y: arriba + Double(i) * lineH + tamano * 0.25,
+                            width: w, height: tamano * 0.5))
+        }
+        ctx.restoreGState()
+    }
+
     /// Mundo → pantalla. Igual que `worldToScreen` del lienzo web.
     func aPantalla(_ p: CGPoint) -> CGPoint {
         CGPoint(x: (p.x - camara.x) * camara.zoom + tamano.width / 2,
@@ -345,6 +388,11 @@ struct Pintor {
             ctx.addPath(camino); ctx.fillPath()
         }
 
+        if !legible(p.estilo.tamano) {
+            silueta(p.lineas, x: izq, y: e.y + p.y, ancho: ancho, lineH: lineH,
+                    tamano: p.estilo.tamano, color: col, alinea: e.alineacion)
+            return
+        }
         for (i, linea) in p.lineas.enumerated() {
             let attr = NSAttributedString(string: linea, attributes: [
                 .font: f, .foregroundColor: col,
@@ -392,6 +440,12 @@ struct Pintor {
         let lineas = e.lineas.isEmpty ? [e.textoLibre ?? ""] : e.lineas
         let lineH = est.tamano * (est.interlineado ?? 1.25)
         ctx.setAlpha(e.opacidad)
+        if !legible(est.tamano) {
+            silueta(lineas, x: e.x, y: e.y, ancho: e.ancho, lineH: lineH,
+                    tamano: est.tamano, color: col, alinea: e.alineacion)
+            ctx.setAlpha(1)
+            return
+        }
         for (i, linea) in lineas.enumerated() {
             let attr = NSAttributedString(string: linea, attributes: [
                 .font: f, .foregroundColor: col, .kern: est.espaciado ?? 0])
@@ -414,32 +468,28 @@ struct Pintor {
     }
 
     // ── conector ───────────────────────────────────────────────────────────
-    func conector(_ e: Elemento) {
-        let pts = e.ruta
+    func conector(_ e: Elemento, conEtiqueta: Bool = true) {
+        let pts = TrazoConector.muestras(e)
         guard pts.count >= 2 else { return }
         let t = tema.aristas[e.claseArista] ?? tema.aristas["flujo"]!
         ctx.saveGState()
         ctx.setAlpha(e.opacidad)
         aplicarTrazo(t)
+        let escala = max(0.5, min(4, e.crudo["strokeScale"]?.num ?? 1))
+        ctx.setLineWidth(t.grosor * escala)
         ctx.setLineJoin(.round)
-        ctx.move(to: pts[0])
-        if e.ruteo == "curva" && pts.count == 2 {
-            let m = CGPoint(x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2)
-            ctx.addQuadCurve(to: pts[1], control: CGPoint(x: m.x, y: pts[0].y))
-        } else {
-            for p in pts.dropFirst() { ctx.addLine(to: p) }
-        }
+        ctx.addPath(TrazoConector.camino(e))
         ctx.strokePath()
         ctx.setLineDash(phase: 0, lengths: [])
-        if e.puntaFin != "ninguna" { punta(pts[pts.count - 2], pts[pts.count - 1], t.color, e.puntaFin) }
-        if e.puntaInicio != "ninguna" { punta(pts[1], pts[0], t.color, e.puntaInicio) }
+        if e.puntaFin != "ninguna" { punta(pts[pts.count - 2], pts[pts.count - 1], t.color, e.puntaFin, escala: escala) }
+        if e.puntaInicio != "ninguna" { punta(pts[1], pts[0], t.color, e.puntaInicio, escala: escala) }
         ctx.restoreGState()
-        if let et = e.etiqueta, !et.isEmpty { etiquetaArista(e, et) }
+        if conEtiqueta { etiquetaArista(e) }
     }
 
-    private func punta(_ de: CGPoint, _ a: CGPoint, _ col: NSColor, _ tipo: String) {
+    private func punta(_ de: CGPoint, _ a: CGPoint, _ col: NSColor, _ tipo: String, escala: Double = 1) {
         let ang = atan2(a.y - de.y, a.x - de.x)
-        let l = 11.0, w = 6.0
+        let l = 11.0 * escala, w = 6.0 * escala
         ctx.setFillColor(col.cgColor)
         ctx.setStrokeColor(col.cgColor)
         switch tipo {
@@ -464,18 +514,19 @@ struct Pintor {
         }
     }
 
-    private func etiquetaArista(_ e: Elemento, _ texto: String) {
-        let pts = e.ruta
-        guard pts.count >= 2 else { return }
-        let m = pts[pts.count / 2]
-        let f = Fuentes.fuente(familia: "montserrat", peso: 600, tamano: 11, cursiva: false)
-        let attr = NSAttributedString(string: texto, attributes: [.font: f, .foregroundColor: tema.pieTexto])
+    func etiquetaArista(_ e: Elemento, obstaculos: [CGRect] = []) {
+        guard e.ruta.count >= 2, let texto=e.etiqueta, !texto.isEmpty else { return }
+        let tam=max(9,min(48,e.crudo["labelStyle"]?["size"]?.num ?? 11))
+        guard legible(tam) else { return }
+        let f = Fuentes.fuente(familia: "montserrat", peso: 600, tamano: tam, cursiva: false)
+        let attr = NSAttributedString(string: texto, attributes: [.font: f, .foregroundColor: tema.cuerpoTexto])
         let l = CTLineCreateWithAttributedString(attr)
         let w = CTLineGetTypographicBounds(l, nil, nil, nil)
+        let r=TrazoConector.cajaEtiqueta(e,tamano:CGSize(width:w+12,height:tam*1.5),obstaculos:obstaculos)
         ctx.setFillColor(tema.lienzo.withAlphaComponent(0.92).cgColor)
-        ctx.fill(CGRect(x: m.x - w/2 - 5, y: m.y - 8, width: w + 10, height: 16))
+        ctx.fill(r)
         ctx.saveGState()
-        ctx.translateBy(x: m.x - w/2, y: m.y + 4)
+        ctx.translateBy(x: r.minX+6, y: r.minY+tam*1.1)
         ctx.scaleBy(x: 1, y: -1)
         ctx.textMatrix = .identity
         ctx.textPosition = .zero
@@ -619,12 +670,7 @@ struct Pintor {
         ctx.setLineWidth(1.5 / camara.zoom)
         ctx.setLineDash(phase: 0, lengths: [])
         ctx.stroke(r.insetBy(dx: -4 / camara.zoom, dy: -4 / camara.zoom))
-        let m = 4.5 / camara.zoom
-        ctx.setFillColor(tema.lienzo.cgColor)
-        for p in [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY),
-                  CGPoint(x: r.minX, y: r.maxY), CGPoint(x: r.maxX, y: r.maxY)] {
-            let caja = CGRect(x: p.x - m, y: p.y - m, width: m * 2, height: m * 2)
-            ctx.fill(caja); ctx.stroke(caja)
-        }
+        // Los tiradores se pintan exclusivamente en manijas(), con la misma
+        // caja y condición que el hit-test. Un marco bloqueado no ofrece falsos agarres.
     }
 }

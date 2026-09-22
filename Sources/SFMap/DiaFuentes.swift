@@ -305,6 +305,7 @@ struct TareaDia: Hashable {
     var frenteId: String?
     /// Las etiquetas de Todoist. Viajan porque el filtro compartido las usa.
     var etiquetas: [String] = []
+    var estado: String? = nil
 }
 
 enum LecturaTodoist {
@@ -314,7 +315,7 @@ enum LecturaTodoist {
     static func token() -> String? {
         if let t = ProcessInfo.processInfo.environment["TODOIST_API_TOKEN"], !t.isEmpty { return t }
         let env = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Developer/business-os/agent-server/.env")
+            .appendingPathComponent(".sfmap/env")
         guard let txt = try? String(contentsOf: env, encoding: .utf8) else { return nil }
         for l in txt.split(separator: "\n") where l.hasPrefix("TODOIST_API_TOKEN=") {
             let v = String(l.dropFirst("TODOIST_API_TOKEN=".count))
@@ -332,6 +333,7 @@ enum LecturaTodoist {
             let project_id: String?
             let due: Vence?
             let labels: [String]?
+            let section_id: String?
             struct Vence: Codable { let date: String?; let datetime: String? }
         }
         let results: [Item]?
@@ -358,6 +360,11 @@ enum LecturaTodoist {
             for pr in p.results ?? [] { frentes[pr.id] = pr.name ?? "" }
         }
 
+        var secciones: [String:String] = [:]
+        if let d = try? await pedir(URL(string:"\(base)/sections?limit=200")!,cabeceras:cab),
+           let p = try? JSONDecoder().decode(Proyectos.self,from:d) {
+            for x in p.results ?? [] {secciones[x.id]=x.name}
+        }
         var crudas: [Pagina.Item] = []
         var cursor: String?
         do {
@@ -390,7 +397,7 @@ enum LecturaTodoist {
                     : nil,
                 frente: t.project_id.flatMap { frentes[$0] },
                 frenteId: t.project_id,
-                etiquetas: t.labels ?? [])
+                etiquetas: t.labels ?? [], estado:t.section_id.flatMap{secciones[$0]})
         }
         return Lectura(valor: tareas, alDia: Date(), fallo: nil)
     }
@@ -439,24 +446,17 @@ extension LecturaTodoist {
 // MARK: - EL PACTO DEL FIERRO (los términos, y el MRR que los mide)
 // ════════════════════════════════════════════════════════════════════════════
 
-/// Los TÉRMINOS del pacto. Doctrina, no dato: van en el código igual que el
-/// conteo del monk mode, y su canónico es
-/// `.claude/memory/project/pacto-del-fierro-m5-ultra-2026-08-25.md`.
-///
-/// ⚠️ **No es "inversión": es TROFEO con fecha.** El canónico marca esa palabra
-/// como el permiso que dejaría comprarla sin pegar el número, así que aquí
-/// tampoco aparece. Y si no se pega: no hay máquina — el widget no tiene modo
-/// "casi", tiene una raya y una fecha.
+/// Datos DEMO del widget opcional de metas. Personalízalos antes de usarlo.
+/// No son métricas ni compromisos de ningún negocio real.
 enum Pacto {
-    static let meta: Double = 15_000                     // USD de MRR
-    static let base: Double = 8_220.45                   // al firmar, 24 ago 2026
-    static let firmado = DateComponents(year: 2026, month: 8, day: 25)
-    static let limite  = DateComponents(year: 2026, month: 10, day: 31)
-    static let trofeo = "Mac Studio M5 Ultra · 512 GB"
-    static let gatillo = "MRR ≥ $15,000 · 31 oct"
-    static let imagen = "specs/the-machinery/evidencia/mac-studio-m5-ultra.png"
-    /// El canónico, para que el widget pueda LLEVAR a sus términos.
-    static let canonico = "doc:.claude/memory/project/pacto-del-fierro-m5-ultra-2026-08-25.md"
+    static let meta: Double = 10_000
+    static let base: Double = 0
+    static let firmado = DateComponents(year: 2026, month: 1, day: 1)
+    static let limite = DateComponents(year: 2026, month: 12, day: 31)
+    static let trofeo = "Tu siguiente meta · ejemplo"
+    static let gatillo = "Configura tu objetivo y fecha"
+    static let imagen = ""
+    static let canonico = "doc:meta.md"
 
     static var fin: Date { DateKit.cal.date(from: limite) ?? Date() }
 
@@ -484,7 +484,7 @@ enum LecturaMRR {
 
     private static func credenciales() -> (String, String)? {
         let env = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Developer/business-os/agent-server/.env")
+            .appendingPathComponent(".sfmap/env")
         guard let txt = try? String(contentsOf: env, encoding: .utf8) else { return nil }
         var u: String?, k: String?
         for l in txt.split(separator: "\n") {
@@ -626,5 +626,33 @@ enum SondaDia {
                 print("     [p\(x.prioridad)] \(x.contenido.prefix(56))  · \(x.frente ?? "—")  · \(x.dia ?? "sin fecha")")
             }
         } else { print("   SIN DATO: \(tk.fallo ?? "?")") }
+    }
+}
+
+extension LecturaTodoist {
+    static func completadas() async -> Lectura<[TareaDia]> {
+        guard let tk=token() else {return Lectura(valor:nil,alDia:nil,fallo:"sin token")}
+        let now=Date(), dia=GDate.formatDay(now)
+        let start=Calendar.current.startOfDay(for:now)
+        let end=Calendar.current.date(byAdding:.day,value:1,to:start)!
+        let iso=ISO8601DateFormatter()
+        var cursor:String?, result:[TareaDia]=[]
+        do {
+            for _ in 0..<20 {
+                var u=URLComponents(string:"https://api.todoist.com/api/v1/tasks/completed/by_completion_date")!
+                u.queryItems=[URLQueryItem(name:"since",value:iso.string(from:start)),URLQueryItem(name:"until",value:iso.string(from:end)),URLQueryItem(name:"limit",value:"200")]
+                if let cursor {u.queryItems!.append(URLQueryItem(name:"cursor",value:cursor))}
+                let d=try await pedir(u.url!,cabeceras:["Authorization":"Bearer "+tk])
+                guard let page=try JSONSerialization.jsonObject(with:d) as? [String:Any],let items=page["items"] as? [[String:Any]] else {throw URLError(.cannotParseResponse)}
+                for t in items {
+                    guard let content=t["content"] as? String else {continue}
+                    let id=(t["task_id"] as? String) ?? (t["id"] as? String) ?? content
+                    result.append(TareaDia(id:id,contenido:content,prioridad:4,dia:dia,hora:nil,frente:nil,frenteId:t["project_id"] as? String))
+                }
+                cursor=page["next_cursor"] as? String
+                if cursor == nil {return Lectura(valor:result,alDia:now,fallo:nil)}
+            }
+            throw URLError(.dataLengthExceedsMaximum)
+        } catch {return Lectura(valor:nil,alDia:nil,fallo:String(describing:error))}
     }
 }

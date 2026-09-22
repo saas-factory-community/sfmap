@@ -6,7 +6,7 @@ import Foundation
 /// el `npm run dev` no esté levantado. Una app de escritorio que depende de que
 /// otro proceso esté corriendo no es una app, es una pestaña con marco.
 ///
-/// La credencial se lee de `agent-server/.env` y NUNCA se copia dentro del
+/// La credencial se lee de `~/.sfmap/env` y NUNCA se copia dentro del
 /// bundle: una llave horneada en un .app viaja a donde viaje el .app.
 /// Traza a stderr. Existe porque la primera vez que la carga falló, la app no
 /// dijo NADA: ni error en pantalla ni línea en consola. Un fallo silencioso
@@ -35,7 +35,7 @@ func traza(_ s: String) {
 }
 
 enum Nube {
-    struct Config { var url: String; var key: String }
+    struct Config { var url: String; var key: String; var owner: String }
 
     static let esquemaV4 = 4
 
@@ -51,8 +51,8 @@ enum Nube {
      * listado que enseña de más es peor que uno que enseña de menos: el de
      * menos se nota, el de más se confunde con trabajo real.
      */
-    static let dueno = "25fd2f9e-0cd4-41e9-b2a6-8242698c8c8d"
-    static let filtroDueno = "user_id=eq.\(dueno)&is_deleted=eq.false" 
+    static var dueno: String { config?.owner ?? "" }
+    static var filtroDueno: String { "user_id=eq.\(dueno)&is_deleted=eq.false" }
 
     /**
      * ⚠️ SOLO LECTURA. El candado que separa una verificación de un accidente.
@@ -71,13 +71,23 @@ enum Nube {
         || CommandLine.arguments.contains("--sin-guardar")
 
     private(set) static var config: Config?
+    private(set) static var local: AlmacenLocal?
+    static var esLocal: Bool { local != nil }
+    static var directorioLocal: URL {
+        let a = CommandLine.arguments
+        if let i = a.firstIndex(of: "--local-dir"), i + 1 < a.count { return URL(fileURLWithPath:a[i+1], isDirectory:true) }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/sfmap/Biblioteca", isDirectory:true)
+    }
     /// Por qué no hay config, en palabras. Un fallo de credenciales que se
     /// presenta como "no hay páginas" manda a buscar en el sitio equivocado.
     private(set) static var problema: String?
 
     static func cargarConfig() {
+        config = nil; local = nil; problema = nil
+        if CommandLine.arguments.contains("--local-dir") || CommandLine.arguments.contains("--local") {
+            local = AlmacenLocal(raiz:directorioLocal); return
+        }
         let rutas = [
-            "\(NSHomeDirectory())/Developer/business-os/agent-server/.env",
             "\(NSHomeDirectory())/.sfmap/env",
         ]
         for r in rutas {
@@ -89,14 +99,28 @@ enum Nube {
                 m[String(s[s.startIndex..<i])] = String(s[s.index(after: i)...])
                     .trimmingCharacters(in: CharacterSet(charactersIn: "\"' "))
             }
-            if let u = m["MC_SUPABASE_URL"], let k = m["MC_SUPABASE_KEY"] {
-                config = Config(url: u, key: k); problema = nil
-                traza("config: \(u) desde \(r)")
+            if m["MC_SUPABASE_URL"] != nil || m["MC_SUPABASE_KEY"] != nil || m["MC_USER_ID"] != nil {
+                do { config = try configuracionRemota(m) }
+                catch { problema = error.localizedDescription }
+                guard config != nil else { traza("config: configuración remota incompleta"); return }
+                traza("config: nube configurada desde \(r)")
                 return
             }
         }
-        problema = "No encontré MC_SUPABASE_URL / MC_SUPABASE_KEY en agent-server/.env ni en ~/.sfmap/env"
-        traza("config: \(problema!)")
+        local = AlmacenLocal(raiz:directorioLocal)
+        traza("biblioteca local · sin conexión privada")
+    }
+
+    /// Solo se conecta a una nube configurada explícitamente por su propietario.
+    static func configuracionRemota(_ valores: [String: String]) throws -> Config {
+        guard let url = valores["MC_SUPABASE_URL"], let u = URL(string: url),
+              ["https", "http"].contains(u.scheme?.lowercased() ?? ""), u.host != nil,
+              let key = valores["MC_SUPABASE_KEY"], !key.isEmpty,
+              let owner = valores["MC_USER_ID"], let uuid = UUID(uuidString: owner) else {
+            throw Err.http("Completa MC_SUPABASE_URL, MC_SUPABASE_KEY y MC_USER_ID (UUID) en ~/.sfmap/env, o usa --local.")
+        }
+        return Config(url: url.hasSuffix("/") ? String(url.dropLast()) : url,
+                      key: key, owner: uuid.uuidString.lowercased())
     }
 
     static func pedir(_ ruta: String, metodo: String = "GET",
@@ -128,6 +152,7 @@ enum Nube {
 
     // ── listar ──────────────────────────────────────────────────────────────
     static func paginas() async throws -> ([ResumenPagina], [Carpeta]) {
+        if let local { return try await local.listar() }
         /*
          * ⚠️ NO SE PIDE `page_elements` PARA LISTAR.
          *
@@ -163,9 +188,10 @@ enum Nube {
     }
 
     // ── abrir ───────────────────────────────────────────────────────────────
-    struct Pagina { var id: String; var nombre: String; var elementos: [Elemento]; var camara: Camara?; var version: Double }
+    struct Pagina { var id: String; var nombre: String; var elementos: [Elemento]; var camara: Camara?; var version: Double; var documento: Json = .objeto([:]) }
 
     static func abrir(_ id: String) async throws -> Pagina {
+        if let local { return try await local.abrir(id) }
         let d = try await pedir("/rest/v1/draw?page_id=eq.\(id)&select=page_id,name,page_elements,agent_version")
         let filas = try JSONDecoder().decode([Json].self, from: d)
         guard let f = filas.first else { throw Err.http("no existe la página \(id)") }
@@ -176,7 +202,7 @@ enum Nube {
             cam = Camara(x: c["x"]?.num ?? 0, y: c["y"]?.num ?? 0, zoom: c["zoom"]?.num ?? 1)
         }
         return Pagina(id: id, nombre: f["name"]?.s ?? "Sin título",
-                      elementos: els, camara: cam, version: f["agent_version"]?.num ?? 0)
+                      elementos: els, camara: cam, version: f["agent_version"]?.num ?? 0, documento:doc ?? .objeto([:]))
     }
 
     // ── guardar ─────────────────────────────────────────────────────────────
@@ -187,6 +213,7 @@ enum Nube {
     /// vació esa capa exactamente así: un guardado que sobrescribe el objeto
     /// entero con las claves que sí conoce.
     static func guardar(_ p: Pagina) async throws -> Double {
+        if let local { return try await local.guardar(p) }
         guard !soloLectura else { throw Err.http("modo solo lectura: no se escribe nada") }
         let d = try await pedir("/rest/v1/draw?page_id=eq.\(p.id)&select=page_elements,agent_version")
         let filas = try JSONDecoder().decode([Json].self, from: d)
@@ -196,25 +223,25 @@ enum Nube {
             throw Err.http("la página cambió en otro sitio (v\(Int(versionServidor)) vs v\(Int(p.version))); recárgala")
         }
 
-        var doc: [String: Json] = [
-            "schemaVersion": .numero(Double(esquemaV4)),
-            "elements": .lista(p.elementos.map(\.crudo)),
-        ]
-        if let c = p.camara {
-            doc["camera"] = .objeto(["x": .numero(c.x), "y": .numero(c.y), "zoom": .numero(c.zoom)])
-        }
-        if let r = previo?["regions"] { doc["regions"] = r }
+        let doc = documentoActualizado(p, previo: previo ?? .objeto([:]))
 
         let cuerpo = try JSONEncoder().encode(Json.objeto([
-            "page_elements": .objeto(doc),
+            "page_elements": doc,
             "agent_version": .numero(versionServidor + 1),
             "updated_at": .texto(ISO8601DateFormatter().string(from: Date())),
         ]))
-        let resp = try await pedir("/rest/v1/draw?page_id=eq.\(p.id)", metodo: "PATCH", cuerpo: cuerpo)
+        let resp = try await pedir("/rest/v1/draw?page_id=eq.\(p.id)&agent_version=eq.\(Int(versionServidor))", metodo: "PATCH", cuerpo: cuerpo)
         // CERO FILAS ES UN ERROR, nunca un éxito silencioso. El v3 marcaba
         // "Guardado" con cero filas afectadas y pasó dos días sin persistir.
         let escritas = (try? JSONDecoder().decode([Json].self, from: resp))?.count ?? 0
         guard escritas > 0 else { throw Err.http("no se escribió ninguna fila") }
         return versionServidor + 1
+    }
+
+    static func documentoActualizado(_ p: Pagina, previo: Json) -> Json {
+        var doc = previo.con("schemaVersion", .numero(Double(esquemaV4)))
+            .con("elements", .lista(p.elementos.map(\.crudo)))
+        if let c = p.camara { doc = doc.con("camera", .objeto(["x":.numero(c.x), "y":.numero(c.y), "zoom":.numero(c.zoom)])) }
+        return doc
     }
 }

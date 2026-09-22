@@ -32,8 +32,7 @@ enum Compilador {
     private(set) static var token: String?
 
     static func cargarToken() {
-        let rutas = ["\(NSHomeDirectory())/Developer/business-os/agent-server/.env",
-                     "\(NSHomeDirectory())/.sfmap/env"]
+        let rutas = ["\(NSHomeDirectory())/.sfmap/env"]
         for r in rutas {
             guard let txt = try? String(contentsOfFile: r, encoding: .utf8) else { continue }
             for l in txt.split(separator: "\n") {
@@ -67,7 +66,7 @@ enum Compilador {
      * "no hay servidor".
      */
     static func recompilar(_ paginaId: String, _ region: Region, tema: String) async throws -> Resultado {
-        guard let t = token else { throw Nube.Err.http("sin OPENCLAW_GATEWAY_TOKEN en agent-server/.env") }
+        guard let t = token else { throw Nube.Err.http("sin OPENCLAW_GATEWAY_TOKEN en ~/.sfmap/env") }
         var req = URLRequest(url: URL(string: "\(base)/api/canvas/pages/\(paginaId)/region")!)
         req.httpMethod = "POST"
         req.timeoutInterval = 40

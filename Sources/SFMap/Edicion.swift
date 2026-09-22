@@ -110,11 +110,27 @@ extension Elemento {
 
     // ── texto ───────────────────────────────────────────────────────────────
 
+    /// ¿La figura es una TARJETA (título + items)? Decide cómo se edita.
+    var esTarjeta: Bool {
+        tipo == "shape" && (textoLigado?.contains { $0.kind == "item" } ?? false)
+    }
+
     /// El texto que el editor MUESTRA de este elemento.
+    ///
+    /// ⚠️ UNA TARJETA SE EDITA ENTERA (31 ago 2026). La versión anterior
+    /// devolvía SOLO la primera parte: al dar doble clic a una tarjeta con
+    /// título + items, `sinTexto` escondía todo y el editor enseñaba solo el
+    /// título — los items "desaparecían". Daniel: *"solamente me permite ver
+    /// el título por alguna razón aunque la descripción tiene más texto"*.
+    /// Ahora una tarjeta se edita como líneas: línea 1 = título, las demás =
+    /// items. Una figura simple de la mano (sin items) conserva el camino viejo.
     var textoEditable: String {
         switch tipo {
         case "text":  return textoLibre ?? ""
-        case "shape": return textoLigado?.first?.texto ?? ""
+        case "shape":
+            guard esTarjeta else { return textoLigado?.first?.texto ?? "" }
+            return (textoLigado ?? []).filter { ["title", "item"].contains($0.kind) }
+                                      .map(\.texto).joined(separator: "\n")
         case "frame": return titulo ?? ""
         // Un bloque de CÓDIGO guarda su texto en `code`. Sin esta línea, el
         // editor lo abría en blanco y al confirmar lo dejaba vacío.
@@ -149,11 +165,35 @@ extension Elemento {
             if partes.isEmpty {
                 if texto.isEmpty { return }
                 partes = [Crear.parteLigada(self, texto)]
-            } else {
-                // La PRIMERA parte es el titulo: la que el editor muestra y la
-                // mano corrige. Las demas se conservan intactas.
-                partes[0] = partes[0].con("text", .texto(texto))
+                tocar(["text": .lista(partes)])
+                remaquetar()
+                return
             }
+            // TARJETA: el editor entregó título + items como líneas. Se
+            // reconstruyen las partes title/item (cada línea no vacía es un
+            // item, con el estilo del primer item como plantilla) y el chip y
+            // el pie se conservan intactos — son del compilador, no de la mano.
+            if esTarjeta {
+                let esVisible = { (p: Json) in ["title", "item"].contains(p["kind"]?.s ?? "title") }
+                let plantillaTitulo = partes.first { ($0["kind"]?.s ?? "title") == "title" }
+                    ?? Crear.parteLigada(self, "")
+                let plantillaItem = partes.first { ($0["kind"]?.s ?? "") == "item" } ?? plantillaTitulo
+                let resto = partes.filter { !esVisible($0) }
+                var lineas = texto.components(separatedBy: "\n")
+                let tituloNuevo = lineas.isEmpty ? "" : lineas.removeFirst()
+                var nuevas: [Json] = [plantillaTitulo.con(["kind": .texto("title"),
+                                                           "text": .texto(tituloNuevo)])]
+                for l in lineas {
+                    let t = l.trimmingCharacters(in: .whitespaces)
+                    if t.isEmpty { continue }
+                    nuevas.append(plantillaItem.con(["kind": .texto("item"), "text": .texto(t)]))
+                }
+                tocar(["text": .lista(nuevas + resto)])
+                remaquetar()
+                return
+            }
+            // Figura simple: la PRIMERA parte es el rótulo; las demás intactas.
+            partes[0] = partes[0].con("text", .texto(texto))
             tocar(["text": .lista(partes)])
             remaquetar()
         /*

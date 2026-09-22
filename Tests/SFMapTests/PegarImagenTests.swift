@@ -54,7 +54,8 @@ final class PegarImagenTests: XCTestCase {
         let r = try XCTUnwrap(Lienzo.guardarPegada(bitmap(10, 10)))
         addTeardownBlock { try? FileManager.default.removeItem(atPath: r.0) }
 
-        XCTAssertTrue(r.0.contains("/Developer/business-os/lienzos/imagenes/"), r.0)
+        let carpeta=FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/sfmap/Imagenes").path + "/"
+        XCTAssertTrue(r.0.hasPrefix(carpeta), r.0)
         let mes = URL(fileURLWithPath: r.0).deletingLastPathComponent().lastPathComponent
         XCTAssertNotNil(mes.range(of: #"^\d{4}-\d{2}$"#, options: .regularExpression),
                         "carpeta por mes, no un vertedero: \(mes)")

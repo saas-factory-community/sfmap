@@ -592,11 +592,32 @@ final class PaletaTinta: NSView {
 
     private var celdas: [(r: NSRect, color: String?)] = []
     private var barras: [(r: NSRect, g: Double)] = []
+    private var cuadroSV: NSRect = .zero
     private var tonoBarra: NSRect = .zero
-    private var luzBarra: NSRect = .zero
+    private var gotero: NSRect = .zero
+    /// Qué superficie del espectro tiene agarrada la mano ahora mismo.
+    private var zonaViva: Espectro.Zona?
 
     static let ANCHO: CGFloat = 216
-    static let ALTO: CGFloat = 186
+    /*
+     * ⚠️ LA GEOMETRÍA SE DECLARA UNA VEZ Y SE DERIVA.
+     *
+     * Estaba repartida en números sueltos dentro de `draw` (54, 108, 150, 186) y
+     * copiada a mano en la escena que la pulsa. Con eso, mover una fila obliga a
+     * acertar el mismo número en cinco sitios; el día que uno se queda atrás, el
+     * clic de la prueba cae en la fila de al lado y la prueba sigue en verde
+     * midiendo otra cosa. Ahora cada banda sale de la anterior.
+     */
+    static let Y_TINTAS: CGFloat = 54
+    static var Y_ESPECTRO: CGFloat { 98 }
+    static var Y_GROSORES: CGFloat { Y_ESPECTRO + Espectro.ALTO + 8 }
+    static var Y_RECIENTES: CGFloat { Y_GROSORES + 36 }
+    /// ⚠️ Incluye SIEMPRE el hueco de "tus colores", aunque no haya ninguno. Si
+    /// la fila apareciera al guardar el primero, nacería fuera del panel: el
+    /// desplegable mide su caja al abrirse y no vuelve a medirla.
+    static var ALTO: CGFloat { Y_RECIENTES + Recientes.ALTO }
+    /// Bajo qué nombre recuerda el lápiz los colores que se eligieron a mano.
+    static let AMBITO = "lapiz"
     /// El margen entre la paleta y el filo de su caja, a los dos lados.
     static let MARGEN: CGFloat = 10
 
@@ -680,7 +701,7 @@ final class PaletaTinta: NSView {
                                                 .foregroundColor: tema.pieTexto])
 
         // ── LAS TINTAS ───────────────────────────────────────────────────
-        let lado: CGFloat = 20, hueco: CGFloat = 4, yTintas: CGFloat = 54
+        let lado: CGFloat = 20, hueco: CGFloat = 4, yTintas = Self.Y_TINTAS
         for (i, tinta) in RailHerramientas.tintas.enumerated() {
             let col = CGFloat(i % 6), fila = CGFloat(i / 6)
             let r = NSRect(x: col * (lado + hueco), y: yTintas + fila * (lado + hueco),
@@ -714,69 +735,17 @@ final class PaletaTinta: NSView {
             }
         }
 
-        // ── EL GRADIENTE: cualquier color, no solo los doce ──────────────
+        // ── EL ESPECTRO: cualquier color, no solo los doce ───────────────
         //
-        // Dos barras y no un cuadrado de saturacion: en 216 px de ancho un
-        // cuadrado sale de 60x60 y elegir dentro se vuelve punteria. Separadas,
-        // cada una es un gesto de UN eje —que tono, y cuanto claro u oscuro—
-        // que es como se piensa un color cuando ya sabes cual quieres.
-        let xBarras: CGFloat = 0, wBarras = bounds.width
-        tonoBarra = NSRect(x: xBarras, y: 108, width: wBarras, height: 14)
-        luzBarra  = NSRect(x: xBarras, y: 126, width: wBarras, height: 14)
-
-        func redondeada(_ r: NSRect) -> CGMutablePath {
-            let c = CGMutablePath()
-            c.addRoundedRect(in: r, cornerWidth: 7, cornerHeight: 7)
-            return c
-        }
-
-        // TONO: el arcoiris entero, en franjas de 1 px.
-        c.saveGState()
-        c.addPath(redondeada(tonoBarra)); c.clip()
-        var x = tonoBarra.minX
-        while x < tonoBarra.maxX {
-            let h = (x - tonoBarra.minX) / tonoBarra.width
-            c.setFillColor(NSColor(hue: h, saturation: 1, brightness: 1, alpha: 1).cgColor)
-            c.fill(NSRect(x: x, y: tonoBarra.minY, width: 1.5, height: tonoBarra.height))
-            x += 1
-        }
-        c.restoreGState()
-
-        // LUZ: del blanco al tono puro y de ahi al negro. Con el tono ELEGIDO,
-        // no con uno fijo — una barra de grises no dice nada sobre el color que
-        // tienes en la mano.
-        let base = tintaViva.usingColorSpace(.deviceRGB) ?? .black
-        c.saveGState()
-        c.addPath(redondeada(luzBarra)); c.clip()
-        x = luzBarra.minX
-        while x < luzBarra.maxX {
-            let t = (x - luzBarra.minX) / luzBarra.width
-            let col = t < 0.5
-                ? NSColor(hue: base.hueComponent, saturation: base.saturationComponent * (t * 2),
-                          brightness: 1, alpha: 1)
-                : NSColor(hue: base.hueComponent, saturation: base.saturationComponent,
-                          brightness: 1 - (t - 0.5) * 1.9, alpha: 1)
-            c.setFillColor(col.cgColor)
-            c.fill(NSRect(x: x, y: luzBarra.minY, width: 1.5, height: luzBarra.height))
-            x += 1
-        }
-        c.restoreGState()
-
-        for r in [tonoBarra, luzBarra] {
-            c.addPath(redondeada(r))
-            c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
-            c.setLineWidth(1); c.strokePath()
-        }
-        // La aguja del tono, donde cae el color que tienes puesto.
-        if actual.color != nil, base.saturationComponent > 0.06 {
-            let ax = tonoBarra.minX + base.hueComponent * tonoBarra.width
-            c.setStrokeColor(NSColor.white.cgColor); c.setLineWidth(3)
-            c.move(to: CGPoint(x: ax, y: tonoBarra.minY + 1)); c.addLine(to: CGPoint(x: ax, y: tonoBarra.maxY - 1))
-            c.strokePath()
-            c.setStrokeColor(NSColor.black.withAlphaComponent(0.55).cgColor); c.setLineWidth(1)
-            c.move(to: CGPoint(x: ax, y: tonoBarra.minY + 1)); c.addLine(to: CGPoint(x: ax, y: tonoBarra.maxY - 1))
-            c.strokePath()
-        }
+        // El mecanismo NO vive aquí: es `Espectro`, y lo montan igual los cinco
+        // paneles de color de la barra. Desde el 30 ago 2026 es un CUADRO
+        // (saturación × brillo) más la barra de tono: las dos barras de antes
+        // metían saturación y brillo en un solo eje, y con eso los tonos mudos
+        // —un pizarra, un caqui— sencillamente no existían.
+        let cajas = Espectro.cajas(x: 0, y: Self.Y_ESPECTRO, ancho: bounds.width)
+        cuadroSV = cajas.cuadro; tonoBarra = cajas.tono
+        Espectro.pintar(c, cuadro: cuadroSV, tono: tonoBarra, base: tintaViva,
+                        hayColor: actual.color != nil, tema: tema)
 
         // ── LOS NUEVE GROSORES ───────────────────────────────────────────
         //
@@ -785,7 +754,7 @@ final class PaletaTinta: NSView {
         // de un vistazo en que punto estas y cuanto queda a cada lado. Ese es
         // el movimiento que el dial tiene que enseñar.
         let ns = RailHerramientas.grosores
-        let y0: CGFloat = 150
+        let y0: CGFloat = Self.Y_GROSORES
         let anchoB = bounds.width / CGFloat(ns.count)
         for (i, gr) in ns.enumerated() {
             let r = NSRect(x: CGFloat(i) * anchoB, y: y0, width: anchoB, height: 30)
@@ -807,49 +776,103 @@ final class PaletaTinta: NSView {
             c.setFillColor(elegido ? NSColor.white.cgColor : tintaViva.cgColor)
             c.fillEllipse(in: NSRect(x: r.midX - d / 2, y: r.midY - d / 2, width: d, height: d))
         }
-    }
 
-    /// `#rrggbb` de un color, que es como los guarda el modelo.
-    private func hex(_ c: NSColor) -> String {
-        let r = c.usingColorSpace(.deviceRGB) ?? .black
-        return String(format: "#%02x%02x%02x",
-                      Int((r.redComponent * 255).rounded()),
-                      Int((r.greenComponent * 255).rounded()),
-                      Int((r.blueComponent * 255).rounded()))
-    }
+        // ── TUS COLORES ──────────────────────────────────────────────────
+        //
+        // Las doce tintas son las de la casa. Estas son las que Daniel buscó
+        // arrastrando por el arcoíris, y son justo las que se perdían al cerrar
+        // el panel. Van ABAJO del todo a propósito: así ni una sola coordenada
+        // de las de arriba se mueve.
+        let yR: CGFloat = Self.Y_RECIENTES
+        let guardados = Recientes.lista(Self.AMBITO)
+        let rotulo = NSAttributedString(
+            string: guardados.isEmpty ? "TUS COLORES · elige del cuadro" : "TUS COLORES",
+            attributes: [.font: Estilo.fuente(9, 700), .foregroundColor: tema.pieTexto, .kern: 0.5])
+        rotulo.draw(at: NSPoint(x: 1, y: yR + 2))
 
-    private func elegirDeBarra(_ p: NSPoint) -> String? {
-        let base = tintaViva.usingColorSpace(.deviceRGB) ?? .black
-        if tonoBarra.contains(p) {
-            let h = min(1, max(0, (p.x - tonoBarra.minX) / tonoBarra.width))
-            // Se conserva el brillo que ya tenias: mover el TONO no debe
-            // devolverte al color puro si estabas trabajando en un pastel.
-            let sat = max(0.55, base.saturationComponent)
-            let bri = actual.color == nil ? 1 : max(0.35, base.brightnessComponent)
-            return hex(NSColor(hue: h, saturation: sat, brightness: bri, alpha: 1))
+        /*
+         * EL GOTERO, en la misma línea del rótulo porque ahí sobra sitio y es
+         * donde pertenece: robar un color de la pantalla es la otra forma de
+         * meter uno "tuyo". Dibujando es donde más falta hace — el color de una
+         * miniatura, de una captura, de un lienzo de al lado.
+         */
+        gotero = NSRect(x: bounds.width - 26, y: yR - 2, width: 24, height: 18)
+        let gp = CGMutablePath()
+        gp.addRoundedRect(in: gotero, cornerWidth: 6, cornerHeight: 6)
+        c.addPath(gp); c.setFillColor(tema.lienzo.cgColor); c.fillPath()
+        c.addPath(gp); c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
+        c.setLineWidth(1); c.strokePath()
+        let gx = gotero.midX, gy = gotero.midY + 2, gr: CGFloat = 4.0
+        let gota = CGMutablePath()
+        gota.move(to: CGPoint(x: gx, y: gy - gr * 2.1))
+        gota.addQuadCurve(to: CGPoint(x: gx + gr, y: gy), control: CGPoint(x: gx + gr * 0.9, y: gy - gr))
+        gota.addArc(center: CGPoint(x: gx, y: gy), radius: gr, startAngle: 0, endAngle: .pi, clockwise: false)
+        gota.addQuadCurve(to: CGPoint(x: gx, y: gy - gr * 2.1), control: CGPoint(x: gx - gr * 0.9, y: gy - gr))
+        c.addPath(gota)
+        c.setStrokeColor(tema.cuerpoTexto.cgColor); c.setLineWidth(1.3); c.strokePath()
+        for (i, hx) in guardados.enumerated() {
+            let r = NSRect(x: CGFloat(i) * (lado + hueco), y: yR + 16, width: lado, height: lado)
+            celdas.append((r, hx))
+            let camino = CGMutablePath()
+            camino.addRoundedRect(in: r, cornerWidth: 6, cornerHeight: 6)
+            c.addPath(camino)
+            c.setFillColor((NSColor(hex: hx) ?? tema.tinta).cgColor)
+            c.fillPath()
+            if actual.color?.caseInsensitiveCompare(hx) == .orderedSame {
+                let anillo = CGMutablePath()
+                anillo.addRoundedRect(in: r.insetBy(dx: -3, dy: -3), cornerWidth: 8, cornerHeight: 8)
+                c.addPath(anillo)
+                c.setStrokeColor(tema.acento.cgColor); c.setLineWidth(2); c.strokePath()
+            }
+            c.addPath(camino)
+            c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
+            c.setLineWidth(1); c.strokePath()
         }
-        if luzBarra.contains(p) {
-            let t = min(1, max(0, (p.x - luzBarra.minX) / luzBarra.width))
-            let h = base.saturationComponent > 0.06 ? base.hueComponent : 0
-            let sat = max(0.6, base.saturationComponent)
-            return hex(t < 0.5
-                ? NSColor(hue: h, saturation: sat * (t * 2), brightness: 1, alpha: 1)
-                : NSColor(hue: h, saturation: sat, brightness: 1 - (t - 0.5) * 1.9, alpha: 1))
-        }
-        return nil
     }
 
-    override func mouseDown(with e: NSEvent) { tocar(convert(e.locationInWindow, from: nil)) }
+    private func elegirDeEspectro(_ p: NSPoint, _ z: Espectro.Zona) -> String {
+        Espectro.hex(Espectro.color(p, zona: z, cuadro: cuadroSV, tono: tonoBarra,
+                                    base: tintaViva, hayColor: actual.color != nil))
+    }
+
+    override func mouseDown(with e: NSEvent) {
+        let p = convert(e.locationInWindow, from: nil)
+        if gotero.contains(p) { robarDeLaPantalla(); return }
+        zonaViva = celdas.contains { $0.r.contains(p) }
+            ? nil : Espectro.zona(p, cuadro: cuadroSV, tono: tonoBarra)
+        tocar(p)
+    }
+
+    /// Roba el color de cualquier punto de la pantalla con la lupa del sistema.
+    /// Se guarda en "tus colores": cuesta el mismo gesto que buscarlo a mano y
+    /// perderlo dolería igual.
+    func robarDeLaPantalla() {
+        NSColorSampler().show { [weak self] c in
+            guard let self, let c else { return }
+            let h = Espectro.hex(c)
+            self.actual = (h, self.actual.grosor)
+            self.alElegir?((h, self.actual.grosor))
+            Recientes.recordar(h, en: Self.AMBITO)
+            self.needsDisplay = true
+        }
+    }
+
+    override func mouseUp(with e: NSEvent) {
+        guard zonaViva != nil else { return }
+        zonaViva = nil
+        // Se guarda al SOLTAR: buscar un color pasa por cuarenta que no quisiste.
+        if let c = actual.color { Recientes.recordar(c, en: Self.AMBITO); needsDisplay = true }
+    }
     /// Arrastrar por las barras cambia el color EN VIVO: elegir un color es
     /// buscarlo, no acertarlo a la primera.
     override func mouseDragged(with e: NSEvent) {
-        let p = convert(e.locationInWindow, from: nil)
-        if let h = elegirDeBarra(p) { alElegir?((h, actual.grosor)) }
+        guard let z = zonaViva else { return }
+        alElegir?((elegirDeEspectro(convert(e.locationInWindow, from: nil), z), actual.grosor))
     }
 
     private func tocar(_ p: NSPoint) {
         if let c = celdas.first(where: { $0.r.contains(p) }) { alElegir?((c.color, actual.grosor)); return }
-        if let h = elegirDeBarra(p) { alElegir?((h, actual.grosor)); return }
+        if let z = zonaViva { alElegir?((elegirDeEspectro(p, z), actual.grosor)); return }
         if let b = barras.first(where: { $0.r.contains(p) }) { alElegir?((actual.color, b.g)) }
     }
 }

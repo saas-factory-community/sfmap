@@ -15,6 +15,7 @@ extension Nube {
     // ── paginas ─────────────────────────────────────────────────────────────
 
     static func crearPagina(nombre: String = "Lienzo nuevo", carpeta: String? = nil) async throws -> ResumenPagina {
+        if let local { return try await local.crear(nombre:nombre, carpeta:carpeta) }
         let cuerpo = try JSONEncoder().encode(Json.objeto([
             "user_id": .texto(dueno),
             "name": .texto(nombre),
@@ -34,6 +35,7 @@ extension Nube {
     }
 
     static func renombrarPagina(_ id: String, _ nombre: String) async throws {
+        if let local { try await local.editarPagina(id, campos:["nombre":.texto(nombre)]); return }
         let cuerpo = try JSONEncoder().encode(Json.objeto([
             "name": .texto(nombre), "updated_at": .texto(ISO8601DateFormatter().string(from: Date())),
         ]))
@@ -45,6 +47,7 @@ extension Nube {
     /// un clic: se marca, deja de listarse, y sigue en la tabla si hay que
     /// recuperarlo.
     static func borrarPagina(_ id: String) async throws {
+        if let local { try await local.editarPagina(id, campos:["is_deleted":.bool(true)]); return }
         let cuerpo = try JSONEncoder().encode(Json.objeto([
             "is_deleted": .bool(true), "updated_at": .texto(ISO8601DateFormatter().string(from: Date())),
         ]))
@@ -53,6 +56,7 @@ extension Nube {
     }
 
     static func moverPagina(_ id: String, aCarpeta carpeta: String?) async throws {
+        if let local { try await local.editarPagina(id, campos:["carpeta":carpeta.map(Json.texto) ?? .nulo]); return }
         let cuerpo = try JSONEncoder().encode(Json.objeto([
             "folder_id": carpeta.map { Json.texto($0) } ?? .nulo,
             "updated_at": .texto(ISO8601DateFormatter().string(from: Date())),
@@ -64,6 +68,7 @@ extension Nube {
     // ── carpetas ────────────────────────────────────────────────────────────
 
     static func crearCarpeta(_ nombre: String = "Carpeta nueva", madre: String? = nil) async throws -> Carpeta {
+        if let local { return try await local.crearCarpeta(nombre, madre:madre) }
         var campos: [String: Json] = ["user_id": .texto(dueno), "name": .texto(nombre)]
         if let m = madre { campos["parent_id"] = .texto(m) }
         let cuerpo = try JSONEncoder().encode(Json.objeto(campos))
@@ -77,12 +82,14 @@ extension Nube {
     /// madre no tiene madre — si no, se formarian cadenas y el arbol dejaria de
     /// caber en el panel.
     static func anidarCarpeta(_ id: String, en madre: String?) async throws {
+        if let local { try await local.editarCarpeta(id, campos:["madre":madre.map(Json.texto) ?? .nulo]); return }
         let cuerpo = try JSONEncoder().encode(Json.objeto(["parent_id": madre.map { Json.texto($0) } ?? .nulo]))
         let d = try await pedir("/rest/v1/draw_folders?id=eq.\(id)&select=id", metodo: "PATCH", cuerpo: cuerpo)
         try exigirUnaFila(d, "no se movió ninguna carpeta")
     }
 
     static func renombrarCarpeta(_ id: String, _ nombre: String) async throws {
+        if let local { try await local.editarCarpeta(id, campos:["nombre":.texto(nombre)]); return }
         let cuerpo = try JSONEncoder().encode(Json.objeto(["name": .texto(nombre)]))
         let d = try await pedir("/rest/v1/draw_folders?id=eq.\(id)&select=id", metodo: "PATCH", cuerpo: cuerpo)
         try exigirUnaFila(d, "no se renombró ninguna carpeta")
@@ -91,6 +98,7 @@ extension Nube {
     /// Borrar una carpeta SUELTA sus paginas, jamas las borra con ella. Es la
     /// diferencia entre ordenar y perder trabajo.
     static func borrarCarpeta(_ id: String) async throws {
+        if let local { try await local.editarCarpeta(id, campos:[:], borrar:true); return }
         // Y suelta a sus HIJAS igual que a sus paginas: borrar el contenedor
         // jamas se lleva el contenido.
         let sinMadre = try JSONEncoder().encode(Json.objeto(["parent_id": .nulo]))
@@ -116,6 +124,7 @@ extension Nube {
      * segundos, no al instante), que es visible y honesto.
      */
     static func version(_ id: String) async -> Double? {
+        if let local { return try? await local.abrir(id).version }
         guard let d = try? await pedir("/rest/v1/draw?page_id=eq.\(id)&select=agent_version") else { return nil }
         return (try? JSONDecoder().decode([Json].self, from: d))?.first?["agent_version"]?.num
     }

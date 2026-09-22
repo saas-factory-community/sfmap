@@ -44,7 +44,7 @@ final class BarraEstado: NSView {
         }
     }
     var estado: String = "" {
-        didSet { txtEstado.stringValue = estado; repintarEstado(); needsLayout = true }
+        didSet { repintarEstado() }
     }
     var esError = false { didSet { repintarEstado() } }
 
@@ -69,27 +69,25 @@ final class BarraEstado: NSView {
     var fondo: Fondo = .puntos { didSet { btnFondo.image = fondo.icono } }
     var puedeDeshacer = false { didSet { btnDeshacer.isEnabled = puedeDeshacer; btnDeshacer.alphaValue = puedeDeshacer ? 1 : 0.35 } }
     var puedeRehacer = false { didSet { btnRehacer.isEnabled = puedeRehacer; btnRehacer.alphaValue = puedeRehacer ? 1 : 0.35 } }
-    var haySeleccion = false
+    var documentosActivos = false { didSet { repintarDocumentos() } }
+    var alDocumentos: ((Bool) -> Void)?
 
-    var alZoom: ((Double) -> Void)?
     var alZoomA: ((Double) -> Void)?
     var alEncuadrar: (() -> Void)?
     var alFondo: ((Fondo) -> Void)?
-    var alTema: (() -> Void)?
     var alDeshacer: (() -> Void)?
     var alRehacer: (() -> Void)?
-    var alExportar: ((Bool) -> Void)?
     /// Solo se pone cuando la página TIENE una región compilada. Un botón de
     /// recompilar sobre un lienzo dibujado a mano no tendría qué compilar.
     var alRecompilar: (() -> Void)? { didSet { btnCompilar.isHidden = alRecompilar == nil; needsLayout = true } }
 
     private let puntoSello = NSView(frame: NSRect(x: 14, y: 24, width: 9, height: 9))
-    private let txtEstado = NSTextField(labelWithString: "")
     private let txtZoom = NSTextField(labelWithString: "100%")
     private let btnFondo = BotonPlano(icono: Icono.fondoPuntos)
     private let btnDeshacer = BotonPlano(icono: Icono.deshacer)
     private let btnRehacer = BotonPlano(icono: Icono.rehacer)
-    private let btnTema = BotonPlano(icono: Icono.luna)
+    private let btnDocumentos = BotonPlano(icono: Icono.documentos)
+    private let btnZoom = BotonPlano(icono: nil, ancho: 62, alto: 36)
     private let btnCompilar = BotonPlano(icono: Icono.compilar)
     private var botones: [BotonPlano] = []
     private var panel: NSView?
@@ -104,27 +102,20 @@ final class BarraEstado: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: NSRect(x: 0, y: 0, width: 560, height: 54))
-        txtEstado.font = Estilo.fuente(13, 600)
         // El zoom es una LECTURA, no una palabra: en Montserrat el `100%` medía
         // distinto que el `90%` y al acercarte la cifra se movía de sitio. En
         // mono el dígito cambia y la aguja se queda quieta (núcleo §5: el
         // monospace vive en el cromo, y un contador es cromo).
         txtZoom.font = Estilo.mono(13, 700)
         txtZoom.alignment = .center
-        addSubview(puntoSello); addSubview(txtEstado); addSubview(txtZoom)
+        addSubview(puntoSello); addSubview(txtZoom)
         repintarSello()
 
         btnDeshacer.globo = "Deshacer  ⌘Z"; btnDeshacer.alPulsar = { [weak self] in self?.alDeshacer?() }
         btnRehacer.globo = "Rehacer  ⇧⌘Z"; btnRehacer.alPulsar = { [weak self] in self?.alRehacer?() }
         btnFondo.globo = "Vista del lienzo"; btnFondo.alPulsar = { [weak self] in self?.abrirFondo() }
-        let menos = BotonPlano(icono: Icono.menos); menos.globo = "Alejar"
-        menos.alPulsar = { [weak self] in self?.alZoom?(1 / 1.2) }
-        let mas = BotonPlano(icono: Icono.mas); mas.globo = "Acercar"
-        mas.alPulsar = { [weak self] in self?.alZoom?(1.2) }
         let encuadrar = BotonPlano(icono: Icono.encuadrar); encuadrar.globo = "Encuadrar  ⇧1"
         encuadrar.alPulsar = { [weak self] in self?.alEncuadrar?() }
-        let exportar = BotonPlano(icono: Icono.descargar); exportar.globo = "Exportar PNG"
-        exportar.alPulsar = { [weak self] in self?.abrirExportar() }
         /*
          * La puerta a los atajos se MUDÓ al engrane de arriba a la derecha, por
          * petición de Daniel. Aquí queda un hueco a propósito: dos puertas al
@@ -134,20 +125,19 @@ final class BarraEstado: NSView {
         btnCompilar.globo = "Recompilar la región gobernada"
         btnCompilar.isHidden = true
         btnCompilar.alPulsar = { [weak self] in self?.alRecompilar?() }
-        btnTema.globo = "Tema claro / oscuro"
-        btnTema.alPulsar = { [weak self] in self?.alTema?() }
-
-        botones = [btnDeshacer, btnRehacer, btnFondo, menos, mas, encuadrar, exportar, btnCompilar, btnTema]
-        botones.forEach { $0.setFrameSize(NSSize(width: 36, height: 36)) }
-        botones.forEach { addSubview($0) }
-        addSubview(txtZoom)
-        // El % de zoom tambien es un boton: abre los niveles.
-        let bZoom = BotonPlano(icono: nil, ancho: 62, alto: 36)
-        bZoom.insetFondo = 3; bZoom.radioFondo = 6
-        bZoom.globo = "Nivel de zoom"
-        bZoom.alPulsar = { [weak self] in self?.abrirZoom() }
-        botones.insert(bZoom, at: 4)
-        addSubview(bZoom)
+        // target/action también responde a teclado y accesibilidad de macOS.
+        btnDocumentos.target = self
+        btnDocumentos.action = #selector(alternarDocumentos)
+        botones = [btnDeshacer, btnRehacer, btnFondo, btnZoom, encuadrar, btnCompilar]
+        for b in botones {
+            b.setFrameSize(NSSize(width: b === btnZoom ? 62 : 36, height: 36))
+            addSubview(b)
+        }
+        btnZoom.insetFondo = 3; btnZoom.radioFondo = 6
+        btnZoom.globo = "Nivel de zoom"
+        btnZoom.alPulsar = { [weak self] in self?.abrirZoom() }
+        addSubview(txtZoom, positioned: .above, relativeTo: btnZoom)
+        repintarDocumentos()
         txtZoom.isEditable = false
         repintar()
     }
@@ -163,28 +153,16 @@ final class BarraEstado: NSView {
      * mitad. Es el mismo fallo de orden que el panel que se maquetaba antes de
      * tener tamaño — dos veces el mismo día.
      */
-    /**
-     * Cuánto ocupa el texto de estado, medido — no 170 px a ojo.
-     *
-     * El reserve fijo dejaba un vacío de dos dedos entre "45 elementos" y el
-     * primer botón, y la barra parecía descuadrada. Con la medida real, la barra
-     * se encoge con lo que dice y crece cuando avisa de algo.
-     */
-    private var anchoEstado: CGFloat {
-        guard !estado.isEmpty else { return 0 }
-        return max(58, min(230, ceil(txtEstado.attributedStringValue.size().width) + 6))
+    // Estado compacto: el detalle vive en el tooltip y en accesibilidad.
+    private let bloqueEstado: CGFloat = 31
+    private func llevaSeparador(_ b: BotonPlano) -> Bool {
+        b === btnFondo || b === btnZoom || b === btnDocumentos
     }
-    /// Cuánto ocupa el bloque de estado con su separador. Sin mensaje, CERO: una
-    /// barra que reserva sitio para un texto que no existe deja un hueco a la
-    /// izquierda y se lee como descuadrada.
-    /// +17 por el sello: el punto ocupa sitio SIEMPRE, también cuando no hay
-    /// mensaje — es el único que informa cuando la barra calla.
-    private var bloqueEstado: CGFloat { anchoEstado == 0 ? 31 : anchoEstado + 39 }
 
     var anchoIdeal: CGFloat {
         var x: CGFloat = bloqueEstado
-        for (i, b) in botones.enumerated() where !b.isHidden {
-            if i == 2 || i == 3 || b === btnTema { x += 7 }
+        for b in botones where !b.isHidden {
+            if llevaSeparador(b) { x += 7 }
             x += b.frame.width + 2
         }
         return x + 8
@@ -192,28 +170,14 @@ final class BarraEstado: NSView {
 
     override func layout() {
         super.layout()
-        // El estado se recortaba en cuanto el mensaje pasaba de dos palabras.
-        // Es la única línea que dice si algo se guardó: no puede terminar en "…".
-        // El SELLO va antes del texto: se ve de reojo sin leer nada.
         puntoSello.frame = NSRect(x: 14, y: 22, width: 9, height: 9)
-        txtEstado.frame = NSRect(x: 31, y: 17, width: anchoEstado, height: 20)
         var x: CGFloat = bloqueEstado
-        for (i, b) in botones.enumerated() {
-            if b.isHidden { continue }
-            // Separadores logicos: tras deshacer/rehacer, tras el fondo, y
-            // antes del tema. Se pintan en draw().
-            //
-            // ⚠️ El ultimo era `i == 8` y apuntaba al COMPILADOR, no al tema:
-            // los indices se eligieron con el array de 9 y luego `bZoom` se
-            // inserta en la posicion 4, corriendo todo lo que va detras. Un
-            // indice literal sobre un array que se modifica despues es una
-            // bomba de relojeria silenciosa — por eso ahora se pregunta por el
-            // BOTON, no por su numero.
-            if i == 2 || i == 3 || b === btnTema { x += 7 }
+        for b in botones where !b.isHidden {
+            if llevaSeparador(b) { x += 7 }
             b.frame = NSRect(x: x, y: 9, width: b.frame.width, height: 36)
             x += b.frame.width + 2
         }
-        txtZoom.frame = NSRect(x: botones[4].frame.minX, y: 17, width: 62, height: 20)
+        txtZoom.frame = NSRect(x: btnZoom.frame.minX, y: 17, width: 62, height: 20)
         /*
          * ⚠️ AQUI NO SE TOCA NI EL FRAME NI EL BOUNDS. Se hizo, y se medio.
          *
@@ -262,37 +226,38 @@ final class BarraEstado: NSView {
             c.setFillColor(tema.filoSurco.cgColor)
             c.fill(NSRect(x: x + 1, y: 12, width: 1, height: 20))
         }
-        for i in [2, 3, 8] where i < botones.count && !botones[i].isHidden {
-            surco(botones[i].frame.minX - 5.5)
+        for b in botones where !b.isHidden && llevaSeparador(b) {
+            surco(b.frame.minX - 5.5)
         }
-        if anchoEstado > 0 { surco(anchoEstado + 17) }
-        // EL ROTULO DEL ZOOM VA HUNDIDO, con la misma pieza que el visor del
-        // minimapa: las dos son placas de titanio con una lectura dentro.
-        if botones.count > 4 {
-            Estilo.pintarVisor(self, tema, en: botones[4].frame.insetBy(dx: 0, dy: 3),
-                               relleno: tema.bisel.bot, radio: 6)
-        }
+        Estilo.pintarVisor(self, tema, en: btnZoom.frame.insetBy(dx: 0, dy: 3),
+                           relleno: tema.bisel.bot, radio: 6)
     }
 
     private func repintar() {
         Estilo.tarjeta(self, tema: tema, radio: 12)
         txtZoom.textColor = abs(zoom - 1) < 0.005 ? tema.cuerpoTexto : tema.oro
         botones.forEach { $0.tema = tema }
-        btnTema.image = tema.nombre == "claro" ? Icono.luna : Icono.sol
         repintarEstado()
         needsDisplay = true
     }
 
-    private func repintarEstado() {
-        // Solo se pone rojo cuando algo falla DE VERDAD. Un indicador que grita
-        // en cada guardado se deja de leer.
-        txtEstado.textColor = esError ? tema.rol("risk").trazo.color : tema.pieTexto
-        repintarSello()
+    @objc private func alternarDocumentos() {
+        documentosActivos.toggle()
+        alDocumentos?(documentosActivos)
     }
+
+    private func repintarDocumentos() {
+        btnDocumentos.activo = documentosActivos
+        btnDocumentos.globo = documentosActivos ? "Documentos activados · desactivar" : "Documentos desactivados · activar"
+        btnDocumentos.setAccessibilityLabel("Abrir documentos al pulsar")
+        btnDocumentos.setAccessibilityValue(documentosActivos ? "Activado" : "Desactivado")
+    }
+
+    private func repintarEstado() { repintarSello() }
 
     private func repintarSello() {
         let color: NSColor
-        switch sello {
+        switch esError ? .error : sello {
         case .guardado:  color = tema.acento
         case .pendiente: color = tema.oro
         case .error:     color = tema.rol("risk").trazo.color
@@ -306,8 +271,12 @@ final class BarraEstado: NSView {
         a.timingFunction = CAMediaTimingFunction(name: .easeOut)
         puntoSello.layer?.add(a, forKey: "color")
         puntoSello.layer?.backgroundColor = color.cgColor
-        puntoSello.toolTip = sello == .guardado ? "Guardado"
-                           : (sello == .pendiente ? "Guardando…" : "No se pudo guardar")
+        let resumen = esError || sello == .error ? "No se pudo guardar" : (sello == .pendiente ? "Guardando…" : "Guardado")
+        let detalle = estado.isEmpty ? resumen : resumen + " · " + estado
+        puntoSello.toolTip = detalle
+        puntoSello.setAccessibilityElement(true)
+        puntoSello.setAccessibilityRole(.image)
+        puntoSello.setAccessibilityLabel(detalle)
     }
 
     func cerrarPanel() { panel?.removeFromSuperview(); panel = nil }
@@ -334,7 +303,7 @@ final class BarraEstado: NSView {
     }
 
     private func abrirZoom() {
-        abrirPanel(110, CGFloat(Self.niveles.count) * 30 + 10, botones[4].frame.minX - 28) { v in
+        abrirPanel(110, CGFloat(Self.niveles.count) * 30 + 10, btnZoom.frame.minX - 28) { v in
             for (i, z) in Self.niveles.enumerated() {
                 let b = BotonPlano(icono: nil, titulo: "\(Int(z * 100))%", ancho: 94, alto: 28)
                 b.tema = tema; b.activo = abs(zoom - z) < 0.005
@@ -345,32 +314,4 @@ final class BarraEstado: NSView {
         }
     }
 
-    /*
-     * EXPORTAR, con menu y en PALABRAS.
-     *
-     * Daniel sobre la version anterior: *"hay un boton que dice sel, intuyo que
-     * descarga pero no me gusta como funciona"*. Y con razon: "sel" era una
-     * abreviatura que solo entiende quien escribio el codigo, aparecia y
-     * desaparecia segun hubiera seleccion, y descargaba de golpe sin decir que.
-     * Ahora la opcion de seleccion se DESHABILITA en vez de esconderse: una
-     * opcion que aparece y desaparece nunca se aprende.
-     */
-    private func abrirExportar() {
-        abrirPanel(214, 76, frame.width - 240) { v in
-            let filas: [(String, Bool)] = [("Exportar el lienzo", false), ("Exportar la selección", true)]
-            for (i, f) in filas.enumerated() {
-                let apagado = f.1 && !haySeleccion
-                let b = BotonPlano(icono: f.1 ? Icono.encuadrar : Icono.imagen, titulo: f.0, ancho: 198, alto: 32)
-                b.tema = tema; b.alignment = .left
-                b.isEnabled = !apagado
-                b.alphaValue = apagado ? 0.45 : 1
-                b.alPulsar = { [weak self] in
-                    guard !apagado else { return }
-                    self?.alExportar?(f.1); self?.cerrarPanel()
-                }
-                b.frame = NSRect(x: 8, y: 6 + CGFloat(1 - i) * 34, width: 198, height: 32)
-                v.addSubview(b)
-            }
-        }
-    }
 }

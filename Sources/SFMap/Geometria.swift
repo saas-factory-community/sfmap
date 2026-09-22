@@ -161,7 +161,7 @@ enum Geo {
             let p = aLocal(e, punto)
 
             if e.tipo == "connector" {
-                let r = e.ruta
+                let r = TrazoConector.muestras(e)
                 for i in 0..<max(0, r.count - 1) where distanciaASegmento(p, r[i], r[i + 1]) <= agarre {
                     return e
                 }
@@ -297,11 +297,11 @@ enum Geo {
 
     /// Que manija hay bajo el punto. El GIRO se prueba primero: vive fuera de
     /// la caja, asi que casi nunca compite, y cuando lo hace gana girar.
-    static func manijaEn(_ r: CGRect, _ p: CGPoint, zoom: Double) -> String? {
+    static func manijaEn(_ r: CGRect, _ p: CGPoint, zoom: Double, texto: Bool = false) -> String? {
         let g = centroGiro(r, zoom: zoom)
-        if hypot(p.x - g.x, p.y - g.y) <= GIRO_AGARRE_PX / zoom { return GIRO }
+        if !texto, hypot(p.x - g.x, p.y - g.y) <= GIRO_AGARRE_PX / zoom { return GIRO }
         let radio = (MANIJA_PX / 2 + 3) / zoom
-        for h in MANIJAS {
+        for h in MANIJAS where !texto || !["n", "s"].contains(h) {
             let c = centroManija(r, h)
             if abs(p.x - c.x) <= radio && abs(p.y - c.y) <= radio { return h }
         }

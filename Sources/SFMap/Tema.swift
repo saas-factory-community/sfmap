@@ -80,6 +80,13 @@ struct Tema {
             "agente": Trazo(color: c("#8C27F1"), grosor: 3, estilo: "dashed"),
             "fragil": Trazo(color: c("#c98a12"), grosor: 3, estilo: "dashed"),
             "hueco": Trazo(color: c("#c4c4cc"), grosor: 1.5, estilo: "dashed"),
+            // ESTADO DE SEGURIDAD sobre la arista (5 sep 2026, «La Red» de El Ecosistema).
+            // La gramática de 5 colores del handoff (verde/azul/ámbar/gris/rojo) ya estaba
+            // firmada para NODOS con leyenda; estas dos clases la llevan al cable cuando el
+            // camino mismo es la exposición (rojo, sólida: se ve de lejos) o el arreglo que
+            // aún no está en producción (azul, punteada). Ámbar sigue siendo `fragil`.
+            "expuesto": Trazo(color: c("#dc2626"), grosor: 3.5, estilo: "solid"),
+            "lab": Trazo(color: c("#2f6fd6"), grosor: 2.5, estilo: "dashed"),
         ],
         tintes: [
             "neutro": (c("#f7f7f9"), c("#dcdce2"), c("#6a6a76")),
@@ -125,6 +132,8 @@ struct Tema {
             "agente": Trazo(color: c("#9d3cf5"), grosor: 3, estilo: "dashed"),
             "fragil": Trazo(color: c("#ffac3d"), grosor: 3, estilo: "dashed"),
             "hueco": Trazo(color: c("#3a3b47"), grosor: 1.5, estilo: "dashed"),
+            "expuesto": Trazo(color: c("#ff5a5a"), grosor: 3.5, estilo: "solid"),
+            "lab": Trazo(color: c("#6fa2ff"), grosor: 2.5, estilo: "dashed"),
         ],
         tintes: [
             "neutro": (c("#15161d"), c("#2f313c"), c("#9a9cab")),

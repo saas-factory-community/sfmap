@@ -39,6 +39,10 @@ import CoreGraphics
 enum VistaCalendario: String, CaseIterable {
     case mes, semana, cuatro, dia
 
+    var vistaSFCal: String {
+        switch self { case .mes: return "month"; case .semana: return "week"; case .cuatro: return "fourDay"; case .dia: return "day" }
+    }
+
     var rotulo: String {
         switch self {
         case .mes: return "MES"
@@ -456,6 +460,11 @@ extension Pintor {
 
     // ── vista de horas (7d · 4d · 1d) ───────────────────────────────────────
 
+    static func tareasCalendario(_ tareas: [TareaDia], dia: Date) -> [TareaDia] {
+        tareas.filter { $0.dia == GDate.formatDay(dia) && !cerradas.contains($0.id) }
+            .sorted { ($0.hora ?? "", $0.prioridad, $0.contenido) < ($1.hora ?? "", $1.prioridad, $1.contenido) }
+    }
+
     private func rejillaHoras(_ r: CGRect, eventos: [CalEvent], hoy: Date, dias: [Date]) {
         guard let d0 = dias.first, let dN = dias.last else { return }
         let finVentana = DateKit.addDays(dN, 1)
@@ -475,7 +484,12 @@ extension Pintor {
         let horas = h1 - h0
 
         let gutter = 62.0
-        let cabDias = 44.0
+        let tareas = (dia.tareas.valor ?? []).filter {
+            dia.filtro.deja(frente: $0.frenteId, prioridad: $0.prioridad, etiquetas: $0.etiquetas, dia: $0.dia)
+        }
+        let filasTareas = min(3, dias.map { Self.tareasCalendario(tareas, dia: $0).count }.max() ?? 0)
+        let altoTareas = filasTareas > 0 ? Double(filasTareas) * 27 + 12 : 0
+        let cabDias = 44.0 + altoTareas
         let x0 = r.minX + gutter
         let anchoCol = (r.width - gutter) / Double(dias.count)
         let top = r.minY + cabDias
@@ -506,6 +520,23 @@ extension Pintor {
                 // buscar el círculo morado.
                 wCaja(CGRect(x: cx, y: top, width: anchoCol, height: alto), radio: 0,
                       relleno: tema.acento.withAlphaComponent(tema.nombre == "oscuro" ? 0.07 : 0.05))
+            }
+        }
+
+        // Misma fuente Todoist que la lista. Fecha sin hora sigue siendo día,
+        // nunca se convierte en una cita ficticia a medianoche.
+        if filasTareas > 0 {
+            wTexto("tareas", CGPoint(x:r.minX+3,y:r.minY+48),tam:12,peso:600,color:tema.pieTexto)
+            for (i,d) in dias.enumerated() {
+                let lista = Self.tareasCalendario(tareas, dia:d)
+                let cx = x0 + Double(i)*anchoCol
+                for (j,t) in lista.prefix(3).enumerated() {
+                    let caja = CGRect(x:cx+3,y:r.minY+44+Double(j)*27,width:anchoCol-6,height:24)
+                    wCaja(caja,radio:4,relleno:tema.acento.withAlphaComponent(0.05),trazo:tema.acento.withAlphaComponent(0.4),grosor:1)
+                    let prefijo = t.hora.map { $0+" · " } ?? ""
+                    let extra = j == 2 && lista.count > 3 ? " (+\(lista.count-3))" : ""
+                    wTexto(wCortar("○ "+prefijo+t.contenido+extra,ancho:caja.width-10,tam:12,peso:600),CGPoint(x:caja.minX+5,y:caja.minY+4),tam:12,peso:600,color:tema.tituloTexto)
+                }
             }
         }
 
@@ -608,11 +639,14 @@ extension Pintor {
         wCaja(CGRect(x: caja.minX, y: caja.minY, width: 5, height: caja.height), radio: 2.5,
               relleno: pasado ? filo.withAlphaComponent(0.5) : filo)
 
-        let colTit = pasado ? tema.pieTexto.withAlphaComponent(0.75) : tema.tituloTexto
+        let colTit = pasado ? tema.cuerpoTexto : tema.tituloTexto
         let pad = 12.0
         let anchoTxt = caja.width - pad - 8
         guard anchoTxt > 30 else { return }
-        let tam = compacto ? 17.0 : 20.0
+        ctx.saveGState()
+        ctx.clip(to: caja.insetBy(dx: 2, dy: 1))
+        defer { ctx.restoreGState() }
+        let tam = min(compacto ? 14.0 : 17.0, max(9, caja.height - 7))
         // Cuántas líneas caben de verdad: el título se ENVUELVE antes que
         // truncarse (lo pidió un crítico ciego el 25 ago viendo cómo
         // «Videollamada Semanal — Prod…» perdía justo el sustantivo).
@@ -986,7 +1020,7 @@ extension Pintor {
         let pad = Pintor.wPad
         let oro = tema.tintes["ambar"]?.trazo ?? tema.acento
         let hoy = Date()
-        var y = wCabeceraDe(r, rotulo: "el trofeo · el pacto del fierro", sub: nil,
+        var y = wCabeceraDe(r, rotulo: "meta · ejemplo configurable", sub: nil,
                             alDia: est.mrr.alDia, vara: Cronista.varaMRR, fallo: est.mrr.fallo)
 
         // ── LA IMAGEN REAL del fierro. Es la mitad del punto: un número no da
@@ -1027,8 +1061,8 @@ extension Pintor {
         let cifra = "$" + NumberFormatter.localizedString(
             from: NSNumber(value: Int(ultimo.mrr.rounded())), number: .decimal)
         wTexto(cifra, CGPoint(x: r.minX + pad, y: y), tam: 44, peso: 800, color: tema.tituloTexto, mono: true)
-        let wMeta = wAncho("de $15,000", tam: 19, peso: 700, mono: true)
-        wTexto("de $15,000", CGPoint(x: r.maxX - pad - wMeta, y: y + 22), tam: 19, peso: 700,
+        let wMeta = wAncho("de $\(Int(Pacto.meta))", tam: 19, peso: 700, mono: true)
+        wTexto("de $\(Int(Pacto.meta))", CGPoint(x: r.maxX - pad - wMeta, y: y + 22), tam: 19, peso: 700,
                color: tema.pieTexto, mono: true)
         y += 56
 
@@ -1041,7 +1075,7 @@ extension Pintor {
         }
         y += 26
         let pct = Int((avance * 100).rounded())
-        wTexto("\(pct)% desde la base del pacto ($8,220 · 24 ago)",
+        wTexto("\(pct)% desde la base del pacto (configurable)",
                CGPoint(x: r.minX + pad, y: y), tam: 15, peso: 600, color: tema.pieTexto, mono: true)
         y += 30
 
@@ -1102,7 +1136,7 @@ extension Pintor {
         ctx.move(to: CGPoint(x: caja.minX, y: py(Pacto.meta)))
         ctx.addLine(to: CGPoint(x: caja.maxX, y: py(Pacto.meta)))
         ctx.strokePath()
-        wTexto("$15,000 · 31 oct", CGPoint(x: caja.minX + 4, y: py(Pacto.meta) + 4), tam: 13,
+        wTexto("$\(Int(Pacto.meta)) · \(GDate.formatDay(Pacto.fin))", CGPoint(x: caja.minX + 4, y: py(Pacto.meta) + 4), tam: 13,
                peso: 700, color: oro.withAlphaComponent(0.85), mono: true)
 
         // LA PENDIENTE QUE FALTA: de donde estás HOY al gatillo.
@@ -1172,7 +1206,7 @@ extension Pintor {
     // MARK: - 3. TAREAS (Todoist)
     // ════════════════════════════════════════════════════════════════════════
 
-    func widgetTareas(_ r: CGRect) {
+    func widgetTareasHistorico(_ r: CGRect) {
         Pintor.casillasTarea.removeAll(keepingCapacity: true)
         let est = dia
         let pad = Pintor.wPad
@@ -1310,7 +1344,7 @@ extension Pintor {
         }
     }
 
-    private func filaTarea(_ t: TareaDia, _ r: CGRect, urgente: Bool) {
+    func filaTarea(_ t: TareaDia, _ r: CGRect, urgente: Bool) {
         let pad = 4.0
         let hecha = Pintor.cerradas.contains(t.id)
         // ── LA CASILLA. Blanco pequeño a propósito: desde aquí no hay deshacer,
@@ -1340,9 +1374,12 @@ extension Pintor {
             x += w + 10
         }
         let anchoTit = r.maxX - x
-        wTexto(wCortar(t.contenido, ancho: anchoTit, tam: 19, peso: urgente ? 800 : 600),
-               CGPoint(x: x, y: r.minY + pad), tam: 19, peso: urgente ? 800 : 600,
-               color: tema.tituloTexto)
+        let lineas = wEnvolver(t.contenido, ancho: anchoTit, tam: 20, peso: urgente ? 800 : 600,
+                              lineas: r.height >= 76 ? 2 : 1)
+        for (i,linea) in lineas.enumerated() {
+            wTexto(linea, CGPoint(x:x,y:r.minY+pad+Double(i)*24),tam:20,peso:urgente ? 800 : 600,color:tema.tituloTexto)
+        }
+        let pieY = r.minY + pad + Double(lineas.count)*24 + 5
         // Pie: frente · cuándo. Lo que hace falta para decidir sin abrir la app.
         var pie: [String] = []
         if let f = t.frente { pie.append(f) }
@@ -1353,7 +1390,7 @@ extension Pintor {
         if let h = t.hora { pie.append(h) }
         if !pie.isEmpty {
             wTexto(wCortar(pie.joined(separator: " · "), ancho: r.width, tam: 16, peso: 600, mono: true),
-                   CGPoint(x: r.minX + lado + 12, y: r.minY + 32), tam: 16, peso: 600,
+                   CGPoint(x: r.minX + lado + 12, y: pieY), tam: 16, peso: 600,
                    color: urgente ? (tema.tintes["rojo"]?.etiqueta ?? tema.pieTexto) : tema.pieTexto,
                    mono: true)
         }

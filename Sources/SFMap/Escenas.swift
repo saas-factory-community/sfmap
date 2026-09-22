@@ -266,10 +266,19 @@ enum Escenas {
             luego(0.2) { l.encuadrar() }
 
         case "paginas":
-            // El arbol de lienzos, con las carpetas abiertas.
+            // El arbol de lienzos DENTRO del primer espacio, con las carpetas abiertas.
             luego(0.2) {
                 if !d.lateralAbierta { d.alternarLateralMenu() }
+                d.lateral.espacio = d.lateral.carpetas.filter { $0.madre == nil }
+                    .sorted { Lateral.porNombre($0.nombre, $1.nombre) }.first?.id
                 d.lateral.abrirTodas()
+            }
+
+        case "espacios":
+            // La portada: una fila por espacio, con su cuenta.
+            luego(0.2) {
+                if !d.lateralAbierta { d.alternarLateralMenu() }
+                d.lateral.espacio = nil
             }
 
         case "oscuro", "claro":
@@ -486,7 +495,7 @@ enum Escenas {
     private static func sondaDeTinta(_ l: Lienzo, _ d: Delegado) {
         // Un documento REAL debajo. Medir sobre un lienzo en blanco daría el
         // coste del trazo y nada más, y el fotograma se paga entero.
-        let fixture = "\(NSHomeDirectory())/Developer/software/sfmap/banco/trazos.json"
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("banco/trazos.json").path
         let casos = BancoTinta.leerFixture(fixture)
         if let completo = casos.first(where: { $0.nombre == "real-completo" }) {
             var els: [Elemento] = []
@@ -1228,7 +1237,7 @@ enum Escenas {
         panel.frame = NSRect(x: 0, y: 0, width: 470, height: 700)
         panel.layoutSubtreeIfNeeded()
         exigir("el panel abre un markdown real del repo",
-               panel.mostrar("docs/business-os/MAPA-FUENTES-DE-VERDAD.md"))
+               panel.mostrar("ejemplo.md"))
         exigir("y DICE que no encontró lo que no existe",
                !panel.mostrar("docs/no-existe-jamas.md"))
 
@@ -1382,6 +1391,18 @@ enum Escenas {
 
         barra.abrirPanelDePrueba("trazo")
         exigir("el panel de trazo abre", barra.hayPanelAbierto)
+        // Foto del panel más alto que hay: es donde un componente que crece —el
+        // espectro lo hizo -— empuja a los de arriba fuera de la tarjeta.
+        if let p = barra.superview?.subviews.last(where: { $0 is Tarjeta }) {
+            p.layoutSubtreeIfNeeded()
+            traza("BARRA_PANEL panel de contorno \(Int(p.frame.width))x\(Int(p.frame.height))")
+            let rep = p.bitmapImageRepForCachingDisplay(in: p.bounds)
+            rep.map { p.cacheDisplay(in: p.bounds, to: $0) }
+            if let d = rep?.representation(using: .png, properties: [:]) {
+                try? d.write(to: URL(fileURLWithPath: "/tmp/panel-contorno.png"))
+                traza("BARRA_PANEL panel de contorno → /tmp/panel-contorno.png")
+            }
+        }
 
         // Mover el GROSOR: el gesto exacto que lo cerraba.
         for g in [3.0, 4.0, 5.0, 6.0] {
@@ -1441,6 +1462,184 @@ enum Escenas {
                 traza("BARRA_PANEL foto → /tmp/barra.png (\(Int(barra.frame.width))x\(Int(barra.frame.height)))")
             }
         }
+
+        /*
+         * ⭐ EL ESPECTRO ESTÁ EN TODOS LOS PANELES DE COLOR, NO SOLO EN EL LÁPIZ.
+         *
+         * Daniel, 30 ago: *"deberíamos poder [elegir] todos los colores dentro
+         * del gradiente en múltiples componentes si no es que en todos donde
+         * incluimos colores"*. Lo tenía el lápiz y nadie más: relleno, contorno,
+         * texto, resaltado y la tinta de un trazo ya dibujado ofrecían casillas
+         * y se acababa ahí.
+         *
+         * Se comprueba por el camino de la MANO —pulsar el botón de la barra,
+         * pulsar la barra de tono— y mirando el elemento después, que es lo que
+         * él recibe. Que la clase tenga la propiedad no prueba que el panel la
+         * monte.
+         */
+        func paletaAbierta() -> VistaPaleta? {
+            func buscar(_ v: NSView) -> VistaPaleta? {
+                if let p = v as? VistaPaleta { return p }
+                for h in v.subviews { if let p = buscar(h) { return p } }
+                return nil
+            }
+            return barra.superview.flatMap(buscar)
+        }
+        func pulsarEnLaBarra(_ globo: String) -> Bool {
+            guard let b = barra.subviews.compactMap({ $0 as? BotonPlano })
+                .first(where: { $0.globo == globo }) else { return false }
+            b.alPulsar?()
+            return true
+        }
+
+        // El mismo cableado que la app: el panel PIDE el color y quien edita el
+        // documento es de fuera. Sin esto la escena probaría el panel contra un
+        // cable suelto, que es como no probarlo.
+        barra.alColor = { campos in
+            guard var e = l.doc.elementos.first(where: { $0.id == "n:rombo" }) else { return }
+            e.ponerColor(campos)
+            l.doc.cargar(l.doc.elementos.map { $0.id == "n:rombo" ? e : $0 })
+            l.doc.seleccion = ["n:rombo"]
+        }
+        // De cero, para que la escena diga lo mismo la segunda vez que se corre.
+        Recientes.olvidarTodo("relleno")
+        l.doc.seleccion = ["n:rombo"]
+        refrescar()
+        exigir("la barra trae el botón de relleno", pulsarEnLaBarra("Relleno"))
+        guard let pal = paletaAbierta() else {
+            exigir("el panel de relleno trae su paleta", false)
+            traza("BARRA_PANEL \(pasos - fallos)/\(pasos) pasos"
+                  + (fallos == 0 ? " · TODO VERDE" : " · \(fallos) FALLOS"))
+            return
+        }
+        pal.layoutSubtreeIfNeeded()
+        exigir("y la paleta del RELLENO monta el espectro", pal.conEspectro)
+        // ⭐ EL CUADRO: el eje que faltaba. Un punto en su interior tiene que dar
+        // la saturación y el brillo de ESE punto, no un tono puro ni un pastel.
+        let q = pal.cajaCuadro
+        let mudo = pal.colorEn(NSPoint(x: q.minX + q.width * 0.4, y: q.minY + q.height * 0.55))
+        let mudoC = mudo.flatMap { NSColor(hex: $0) }?.usingColorSpace(.deviceRGB)
+        exigir("el cuadro da un tono MUDO, que las dos barras no podían (\(mudo ?? "—"))",
+               (mudoC?.saturationComponent ?? 0) > 0.2 && (mudoC?.saturationComponent ?? 1) < 0.6
+            && (mudoC?.brightnessComponent ?? 0) > 0.2 && (mudoC?.brightnessComponent ?? 1) < 0.8)
+        // Y escribir un hex exacto pone ESE color, sin buscarlo.
+        exigir("escribir un hex exacto lo pone", pal.escribir("#3a6ff0"))
+        exigir("y uno inválido no rompe nada", !pal.escribir("no soy un color"))
+        /*
+         * ⭐ EL CAMPO Y EL CUADRO DICEN LO MISMO.
+         *
+         * Son dos superficies para el mismo dato: si el campo se queda con lo
+         * que había mientras el cuadro ya movió el color, el panel enseña dos
+         * verdades a la vez y la que se cree es la escrita.
+         */
+        let campoHex = pal.superview?.subviews.compactMap { $0 as? NSTextField }
+            .first { $0.font == Estilo.mono(11, 600) }
+        exigir("el panel monta el campo hex", campoHex != nil)
+        exigir("y sigue al cuadro (\(campoHex?.stringValue ?? "—"))",
+               campoHex?.stringValue == "#3a6ff0")
+        // La barra de tono vive debajo de las casillas. Se pulsa a un tercio del
+        // ancho, que en el arcoíris cae en verde: un color que NINGUNA de las
+        // dieciocho muestras de relleno tiene.
+        let pTono = NSPoint(x: pal.cajaTono.width / 3, y: pal.cajaTono.midY)
+        let elegido = pal.colorEn(pTono)
+        exigir("y el punto del arcoíris devuelve un color (\(elegido ?? "—"))", elegido != nil)
+        clic(pal, pTono)
+        refrescar()
+        let relleno = l.doc.elementos.first { $0.id == "n:rombo" }?.relleno
+        exigir("y pulsarlo pinta el elemento con ÉL (\(relleno ?? "—"))", relleno != nil && relleno == elegido)
+        exigir("un color del arcoíris NO es ninguna de las muestras",
+               relleno.map { r in !Paletas.rellenos.contains { $0.color == r } } ?? false)
+
+        /*
+         * ⭐ Y AL SOLTAR SE QUEDA EN "TUS COLORES".
+         *
+         * Daniel, 30 ago: *"que ahí se queden en memoria para conservar ciertos
+         * colores de mi gusto"*. Se comprueba el ciclo entero por el camino de
+         * la mano: buscar en el arcoíris, soltar, y volver a pulsarlo desde la
+         * fila de abajo — que es lo que él va a hacer mañana con ese color.
+         */
+        exigir("el color soltado se queda en TUS COLORES",
+               Recientes.lista("relleno").first == elegido)
+        // Se vuelve a abrir el panel: la fila tiene que sobrevivir al cierre.
+        barra.cerrarPanel()
+        _ = pulsarEnLaBarra("Relleno")
+        guard let pal2 = paletaAbierta() else { exigir("el panel reabre", false); return }
+        exigir("y sigue ahí cuando el panel se vuelve a abrir",
+               Recientes.lista("relleno").first == elegido)
+        // Devolver el elemento a su rol y recuperar el color desde la fila.
+        barra.alColor?(["fill": nil])
+        refrescar()
+        clic(pal2, NSPoint(x: pal2.cajaRecientes.minX + 12, y: pal2.cajaRecientes.minY + 28))
+        exigir("y pulsar la casilla lo vuelve a poner (\(l.doc.elementos.first { $0.id == "n:rombo" }?.relleno ?? "—"))",
+               l.doc.elementos.first { $0.id == "n:rombo" }?.relleno == elegido)
+
+        // Y una foto del panel entero: "¿se ve el arcoíris debajo de las
+        // casillas?" es de las cosas que hay que MIRAR.
+        if let caja = pal2.superview, let rep = caja.bitmapImageRepForCachingDisplay(in: caja.bounds) {
+            caja.cacheDisplay(in: caja.bounds, to: rep)
+            if let d = rep.representation(using: .png, properties: [:]) {
+                try? d.write(to: URL(fileURLWithPath: "/tmp/panel-relleno.png"))
+                traza("BARRA_PANEL panel de relleno → /tmp/panel-relleno.png")
+            }
+        }
+
+        /*
+         * ⭐ Y UN TRAZO YA DIBUJADO TIENE EL MISMO PANEL QUE UNA CAJA.
+         *
+         * Tenía CINCO discos sueltos en la barra: menos colores para repintarse
+         * que cualquier otro elemento, y 168 px de barra pagados por ellos. El
+         * riesgo del cambio es que el botón nuevo no aparezca o no abra nada,
+         * así que se pulsa por el camino de la mano.
+         */
+        barra.cerrarPanel()
+        l.doc.cargar([Elemento(.objeto([
+            "id": .texto("t:trazo"), "type": .texto("ink"),
+            "x": .numero(0), "y": .numero(0), "size": .numero(4),
+            "points": .lista([.objeto(["x": .numero(0), "y": .numero(0)]),
+                              .objeto(["x": .numero(60), "y": .numero(20)])]),
+        ]))])
+        l.doc.seleccion = ["t:trazo"]
+        refrescar()
+        exigir("un trazo trae su botón de color", pulsarEnLaBarra("Color de la tinta"))
+        let palTinta = paletaAbierta()
+        exigir("y abre el MISMO panel, con espectro", palTinta?.conEspectro == true)
+        exigir("y su arcoíris devuelve color",
+               palTinta.flatMap { $0.colorEn(NSPoint(x: $0.cajaTono.width / 2, y: $0.cajaTono.midY)) } != nil)
+
+        /*
+         * ⭐ LA PALETA DEL LÁPIZ TAMBIÉN GUARDA LOS TUYOS.
+         *
+         * Es donde más colores se eligen a mano —dibujando— y donde más se
+         * perdían. Su fila va ABAJO DEL TODO a propósito: así ni una sola
+         * coordenada de las de arriba (muestra, doce tintas, arcoíris, nueve
+         * grosores) se mueve, y la escena de la mano que las pulsa por píxel
+         * sigue valiendo.
+         */
+        Recientes.olvidarTodo(PaletaTinta.AMBITO)
+        for c in ["#8C27F1", "#ff9101", "#0d9bd4"] { Recientes.recordar(c, en: PaletaTinta.AMBITO) }
+        let lapiz = PaletaTinta(frame: NSRect(x: 0, y: 0, width: PaletaTinta.ANCHO,
+                                              height: PaletaTinta.ALTO))
+        lapiz.tema = l.tema
+        lapiz.actual = ("#8C27F1", 4)
+        let caja = Tarjeta(tema: l.tema, radio: 12)
+        caja.frame = NSRect(x: 0, y: 0, width: PaletaTinta.ANCHO + 20, height: PaletaTinta.ALTO + 12)
+        lapiz.frame.origin = NSPoint(x: 10, y: 6)
+        caja.addSubview(lapiz)
+        barra.superview?.addSubview(caja)
+        caja.layoutSubtreeIfNeeded()
+        if let rep = caja.bitmapImageRepForCachingDisplay(in: caja.bounds) {
+            caja.cacheDisplay(in: caja.bounds, to: rep)
+            exigir("la paleta del lápiz cabe entera en su caja", rep.pixelsHigh > 0)
+            if let d = rep.representation(using: .png, properties: [:]) {
+                try? d.write(to: URL(fileURLWithPath: "/tmp/paleta-lapiz.png"))
+                traza("BARRA_PANEL paleta del lápiz → /tmp/paleta-lapiz.png")
+            }
+        }
+        var elegido2: String?
+        lapiz.alElegir = { elegido2 = $0.color }
+        clic(lapiz, NSPoint(x: 12, y: PaletaTinta.Y_RECIENTES + 26))
+        exigir("y pulsar uno de TUS COLORES lo elige (\(elegido2 ?? "—"))", elegido2 == "#0d9bd4")
+        caja.removeFromSuperview()
 
         traza("BARRA_PANEL \(pasos - fallos)/\(pasos) pasos" + (fallos == 0 ? " · TODO VERDE" : " · \(fallos) FALLOS"))
     }

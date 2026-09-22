@@ -25,6 +25,9 @@ struct Elemento {
     var rol: String { crudo["role"]?.s ?? "card" }
     var figura: String { crudo["shape"]?.s ?? "rect" }
     var enlace: String? { crudo["link"]?.s }
+    /// Opt-in por elemento: clic quieto navega; arrastre y selección múltiple
+    /// conservan su gesto. Los documentos anteriores mantienen el doble clic.
+    var abreAlClic: Bool { crudo["openOnClick"]?.b ?? false }
     var grupo: String? { crudo["groupId"]?.s }
     var fijado: Bool { crudo["origin"]?["pinned"]?.b ?? false }
     var compilado: Bool { crudo["origin"] != nil }

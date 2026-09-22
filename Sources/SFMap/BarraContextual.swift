@@ -114,46 +114,205 @@ final class Deslizador: NSView {
     }
 }
 
-/// Una cuadricula de muestras de color.
+/**
+ * Una cuadricula de muestras de color — y, debajo, TODOS los demas.
+ *
+ * Las muestras son la paleta de RESTRICCION y siguen mandando: se abarcan de un
+ * vistazo y se eligen sin apuntar. El espectro es la valvula de escape, y desde
+ * el 30 ago 2026 la monta cualquier panel que enseñe color, no solo el lapiz.
+ */
 final class VistaPaleta: NSView {
     var tema: Tema = .claro { didSet { needsDisplay = true } }
     var muestras: [Muestra] = []
-    var valor: String? { didSet { needsDisplay = true } }
+    var valor: String? { didSet { needsDisplay = true; alCambiarValor?(valor) } }
+    /// Para que el campo hex diga siempre lo mismo que la paleta: se elige del
+    /// cuadro y el texto tiene que seguir, o el panel dice dos cosas a la vez.
+    var alCambiarValor: ((String?) -> Void)?
     var redondo = false
     var conMarca = true
+    /// Las dos barras del arcoiris debajo de la cuadricula.
+    var conEspectro = false
+    /**
+     * El color que se ESTA VIENDO cuando `valor` es nil.
+     *
+     * Sin esto la barra de luz partiria del negro en cuanto el elemento sigue a
+     * su rol, y el primer arrastre daria un salto en vez de un ajuste. El panel
+     * ya calcula el efectivo para pintar el icono de la barra: se reusa.
+     */
+    var efectivo: NSColor?
+    /// Si esta puesto, el espectro emite `rgba(...)` con este alfa en vez de
+    /// hex: es lo que pide el RESALTADO, que tiene que dejar leer el texto.
+    var alfa: Double?
+    /// Bajo que nombre recuerda ESTE panel los colores que se eligieron a mano.
+    /// Nulo = no recuerda (la paleta no tiene fila de recientes).
+    var ambito: String?
+    /// Donde empieza el cuadro cuando el elemento todavia sigue a su rol y no
+    /// hay saturacion de la que partir: x = saturacion, y = 1 - brillo. En un
+    /// relleno se quiere un pastel; en un trazo, un tono vivo.
+    var puntoNuevo = NSPoint(x: 0.85, y: 0.15)
+    /// El delegado del campo hex, sostenido aqui: `NSTextField` no lo retiene.
+    var puenteCampo: AnyObject?
     var alElegir: ((String?) -> Void)?
+    /// Un arrastre por el espectro es UN cambio para el historial, no cuarenta.
+    /// Misma regla que el `Deslizador`, y por el mismo motivo.
+    var alAbrirGesto: (() -> Void)?
+    var alCerrarGesto: ((String) -> Void)?
 
     override var isFlipped: Bool { true }
-    private var celdas: [(r: NSRect, c: String?)] = []
+    /// Qué superficie del espectro tiene agarrada la mano ahora mismo.
+    private var zonaViva: Espectro.Zona?
 
-    static func alto(_ n: Int, conMarca: Bool) -> CGFloat {
+    /**
+     * ⚠️ LAS CASILLAS SE CALCULAN, IGUAL QUE LAS BARRAS.
+     *
+     * Estaban en una lista que rellenaba `draw`, y por eso un panel recién
+     * abierto no respondía al primer clic hasta haberse pintado. En la app no
+     * se nota —siempre se pinta antes de que la mano llegue— y por eso el fallo
+     * vivió meses: lo caza la escena, que pulsa sin esperar. Un control cuyo
+     * hit-test depende de haberse dibujado miente mientras no lo mires.
+     */
+    private var casillas: [(r: NSRect, m: Muestra)] {
+        var out: [(NSRect, Muestra)] = []
+        var y: CGFloat = 0
+        if conMarca {
+            out.append((NSRect(x: 0, y: 0, width: 24, height: 24), Paletas.sinColor))
+            for (i, m) in Paletas.marca.enumerated() {
+                out.append((NSRect(x: 33 + CGFloat(i) * 30, y: 0, width: 24, height: 24), m))
+            }
+            y = 34
+        }
+        for (i, m) in muestras.enumerated() {
+            out.append((NSRect(x: CGFloat(i % 6) * 30, y: y + CGFloat(i / 6) * 30,
+                               width: 24, height: 24), m))
+        }
+        if let ambito {
+            let yR = cajaRecientes.minY + 16
+            for (i, hx) in Recientes.lista(ambito).enumerated() {
+                out.append((NSRect(x: CGFloat(i) * 30, y: yR, width: 24, height: 24),
+                            Muestra(id: hx, color: hx, etiqueta: hx)))
+            }
+        }
+        return out
+    }
+
+    /**
+     * ⚠️ LA GEOMETRÍA DEL ESPECTRO SE CALCULA, NO SE RECUERDA.
+     *
+     * La paleta del lápiz guarda sus dos barras en variables que rellena
+     * `draw`, y por eso su escena de verificación tiene que forzar un pintado
+     * antes de poder pulsarlas. Un control cuyo hit-test depende de haberse
+     * dibujado es un control que miente mientras no lo mires. Aquí sale de
+     * `bounds`, que existe desde que la vista tiene marco.
+     */
+    /// El ancho útil: seis casillas de 30 menos el hueco que sobra a la derecha.
+    static let UTIL: CGFloat = 6 * 30 - 6
+
+    private var yEspectro: CGFloat { (conMarca ? 34 : 0) + CGFloat((muestras.count + 5) / 6) * 30 }
+    private var cajas: (cuadro: NSRect, tono: NSRect) {
+        Espectro.cajas(x: 0, y: yEspectro, ancho: Self.UTIL)
+    }
+    /// Dónde cae el cuadro de saturación × brillo.
+    var cajaCuadro: NSRect { conEspectro ? cajas.cuadro : .zero }
+    /// Dónde cae la barra del arcoíris, para quien tenga que pulsarla.
+    var cajaTono: NSRect { conEspectro ? cajas.tono : .zero }
+    /// La fila del campo hex y el cuentagotas.
+    var cajaExacto: NSRect {
+        guard conEspectro else { return .zero }
+        return NSRect(x: 0, y: yEspectro + Espectro.ALTO + 8, width: Self.UTIL, height: 24)
+    }
+    /// El botón que roba un color de cualquier punto de la pantalla.
+    var cajaGotero: NSRect {
+        guard conEspectro else { return .zero }
+        return NSRect(x: Self.UTIL - 28, y: cajaExacto.minY, width: 28, height: 24)
+    }
+    /// Dónde empieza la fila de los colores que Daniel ya eligió a mano.
+    var cajaRecientes: NSRect {
+        guard ambito != nil else { return .zero }
+        return NSRect(x: 0, y: yEspectro + (conEspectro ? Espectro.ALTO + 32 : 0),
+                      width: Self.UTIL, height: Recientes.ALTO)
+    }
+
+    static func alto(_ n: Int, conMarca: Bool, conEspectro: Bool = false,
+                     conRecientes: Bool = false) -> CGFloat {
         let filas = CGFloat((n + 5) / 6)
         return (conMarca ? 34 : 0) + filas * 30
+             + (conEspectro ? Espectro.ALTO + 32 : 0)   // + la fila del hex y el gotero
+             + (conRecientes ? Recientes.ALTO : 0)
+    }
+
+    /// El color del que parte el espectro: el elegido, o el que se ve.
+    private var base: NSColor {
+        valor.flatMap { NSColor(hex: $0) } ?? efectivo ?? tema.cuerpoTexto
     }
 
     override func draw(_ dirty: NSRect) {
         guard let c = NSGraphicsContext.current?.cgContext else { return }
-        celdas.removeAll()
-        var y: CGFloat = 0
+        for (r, m) in casillas { casilla(c, r, m) }
         if conMarca {
-            var x: CGFloat = 0
-            casilla(c, NSRect(x: x, y: y, width: 24, height: 24), Paletas.sinColor); x += 30
             c.setFillColor(tema.rol("card").trazo.color.cgColor)
-            c.fill(NSRect(x: x - 3, y: y + 2, width: 1, height: 20)); x += 3
-            for m in Paletas.marca { casilla(c, NSRect(x: x, y: y, width: 24, height: 24), m); x += 30 }
+            c.fill(NSRect(x: 27, y: 2, width: 1, height: 20))
             let etq = NSAttributedString(string: "MARCA", attributes: [
                 .font: Estilo.fuente(9, 700), .foregroundColor: tema.pieTexto, .kern: 0.5])
-            etq.draw(at: NSPoint(x: x + 2, y: y + 7))
-            y += 34
+            etq.draw(at: NSPoint(x: 33 + CGFloat(Paletas.marca.count) * 30 + 2, y: 7))
         }
-        for (i, m) in muestras.enumerated() {
-            let col = CGFloat(i % 6), fila = CGFloat(i / 6)
-            casilla(c, NSRect(x: col * 30, y: y + fila * 30, width: 24, height: 24), m)
+        // El ancho del espectro es el de la CUADRICULA (seis casillas de 30
+        // menos el hueco final), no el del marco: alinearlo con la ultima
+        // columna es lo que hace que se lea como parte de la misma paleta.
+        if conEspectro {
+            Espectro.pintar(c, cuadro: cajas.cuadro, tono: cajas.tono, base: base,
+                            hayColor: valor != nil, tema: tema)
+            pintarExacto(c)
         }
+        guard let ambito else { return }
+        /*
+         * LA FILA DE LOS TUYOS.
+         *
+         * El hueco se reserva SIEMPRE que el panel recuerde, aunque esté vacío.
+         * Si apareciera al guardar el primero, la fila nacería FUERA de la
+         * tarjeta: el marco de la vista ya está puesto cuando el panel se abre y
+         * no vuelve a medirse. Vacío se ve el rótulo solo, que además dice qué
+         * va a pasar ahí.
+         */
+        let etq = NSAttributedString(
+            string: Recientes.lista(ambito).isEmpty ? "TUS COLORES · elige del cuadro" : "TUS COLORES",
+            attributes: [.font: Estilo.fuente(9, 700), .foregroundColor: tema.pieTexto, .kern: 0.5])
+        etq.draw(at: NSPoint(x: 1, y: cajaRecientes.minY + 2))
+    }
+
+    /**
+     * LA FILA DEL COLOR EXACTO: escribirlo, o robarlo de la pantalla.
+     *
+     * El cuadro sirve para BUSCAR un color; estos dos para PONER uno que ya
+     * sabes cuál es. El campo es para cuando lo traes escrito (una marca, un
+     * token del sistema de diseño) y el gotero para cuando está delante de ti
+     * —en una miniatura, en una captura— y no tiene nombre.
+     */
+    private func pintarExacto(_ c: CGContext) {
+        let campo = NSRect(x: 0, y: cajaExacto.minY, width: Self.UTIL - 34, height: 24)
+        let cp = CGMutablePath(); cp.addRoundedRect(in: campo, cornerWidth: 7, cornerHeight: 7)
+        c.addPath(cp); c.setFillColor(tema.lienzo.cgColor); c.fillPath()
+        c.addPath(cp); c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
+        c.setLineWidth(1); c.strokePath()
+        // El texto lo pinta el NSTextField que vive encima; aquí va solo su caja.
+
+        let g = cajaGotero
+        let gp = CGMutablePath(); gp.addRoundedRect(in: g, cornerWidth: 7, cornerHeight: 7)
+        c.addPath(gp); c.setFillColor(tema.lienzo.cgColor); c.fillPath()
+        c.addPath(gp); c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
+        c.setLineWidth(1); c.strokePath()
+        // Una gota con su punta arriba: un círculo a secas se lee como otra
+        // muestra de color, que es justo lo que este botón NO es.
+        let cx = g.midX, cy = g.midY + 2, r: CGFloat = 4.5
+        let gota = CGMutablePath()
+        gota.move(to: CGPoint(x: cx, y: cy - r * 2.1))
+        gota.addQuadCurve(to: CGPoint(x: cx + r, y: cy), control: CGPoint(x: cx + r * 0.9, y: cy - r))
+        gota.addArc(center: CGPoint(x: cx, y: cy), radius: r, startAngle: 0, endAngle: .pi, clockwise: false)
+        gota.addQuadCurve(to: CGPoint(x: cx, y: cy - r * 2.1), control: CGPoint(x: cx - r * 0.9, y: cy - r))
+        c.addPath(gota)
+        c.setStrokeColor(tema.cuerpoTexto.cgColor); c.setLineWidth(1.4); c.strokePath()
     }
 
     private func casilla(_ c: CGContext, _ r: NSRect, _ m: Muestra) {
-        celdas.append((r, m.color))
         let camino = CGMutablePath()
         let radio: CGFloat = redondo ? 12 : 7
         camino.addRoundedRect(in: r, cornerWidth: radio, cornerHeight: radio)
@@ -175,9 +334,88 @@ final class VistaPaleta: NSView {
         }
     }
 
+    /// El texto de un color en el formato que guarda este campo.
+    func texto(_ c: NSColor) -> String {
+        alfa.map { Espectro.rgba(c, $0) } ?? Espectro.hex(c)
+    }
+
+    /// El color que toca el punto dentro de la zona agarrada.
+    func colorEn(_ p: NSPoint, _ z: Espectro.Zona? = nil) -> String? {
+        guard conEspectro,
+              let zona = z ?? Espectro.zona(p, cuadro: cajas.cuadro, tono: cajas.tono)
+        else { return nil }
+        return texto(Espectro.color(p, zona: zona, cuadro: cajas.cuadro, tono: cajas.tono,
+                                    base: base, hayColor: valor != nil, puntoNuevo: puntoNuevo))
+    }
+
+    /**
+     * ⭐ ROBAR UN COLOR DE CUALQUIER PUNTO DE LA PANTALLA.
+     *
+     * Es la respuesta corta a "el color exacto": el que quieres muchas veces ya
+     * está delante —en una miniatura, en una captura, en otro lienzo— y no tiene
+     * nombre ni cae en ninguna casilla. `NSColorSampler` es la lupa del sistema:
+     * sin ventana propia, sin permisos, y devuelve el píxel exacto.
+     *
+     * Se guarda en "tus colores" como cualquier elección a mano: robarlo cuesta
+     * el mismo gesto que buscarlo y perderlo dolería igual.
+     */
+    func robarDeLaPantalla() {
+        NSColorSampler().show { [weak self] c in
+            guard let self, let c else { return }
+            let t = self.texto(c)
+            self.valor = t
+            self.alElegir?(t)
+            if let a = self.ambito { Recientes.recordar(t, en: a) }
+            self.needsDisplay = true
+        }
+    }
+
+    /// Un color escrito a mano. Devuelve si valía.
+    @discardableResult
+    func escribir(_ crudo: String) -> Bool {
+        guard let c = Espectro.leer(crudo) else { return false }
+        let t = texto(c)
+        valor = t
+        alElegir?(t)
+        if let a = ambito { Recientes.recordar(t, en: a) }
+        needsDisplay = true
+        return true
+    }
+
     override func mouseDown(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
-        if let hit = celdas.first(where: { $0.r.insetBy(dx: -3, dy: -3).contains(p) }) { alElegir?(hit.c) }
+        if let hit = casillas.first(where: { $0.r.insetBy(dx: -3, dy: -3).contains(p) }) {
+            valor = hit.m.color
+            alElegir?(hit.m.color); return
+        }
+        if conEspectro, cajaGotero.contains(p) { robarDeLaPantalla(); return }
+        guard let z = Espectro.zona(p, cuadro: cajas.cuadro, tono: cajas.tono),
+              let c = colorEn(p, z) else { return }
+        zonaViva = z
+        alAbrirGesto?()
+        valor = c
+        alElegir?(c)
+    }
+
+    /// Arrastrar cambia el color EN VIVO: elegir un color es buscarlo, no
+    /// acertarlo a la primera.
+    override func mouseDragged(with e: NSEvent) {
+        guard let z = zonaViva,
+              let c = colorEn(convert(e.locationInWindow, from: nil), z) else { return }
+        valor = c
+        alElegir?(c)
+    }
+
+    override func mouseUp(with e: NSEvent) {
+        guard zonaViva != nil else { return }
+        zonaViva = nil
+        // ⚠️ SE GUARDA AL SOLTAR. Buscar un color pasa por cuarenta tonos que no
+        // quisiste; el que quisiste es donde levantaste el dedo.
+        if let ambito, let v = valor, !muestras.contains(where: { $0.color == v }) {
+            Recientes.recordar(v, en: ambito)
+            needsDisplay = true
+        }
+        alCerrarGesto?("color")
     }
 }
 
@@ -208,7 +446,7 @@ final class CampoNumero: NSView {
         campo.alignment = .center
         campo.usesSingleLineMode = true
         campo.cell?.wraps = false
-        campo.font = Estilo.fuente(12, 600)
+        campo.font = Estilo.fuente(12, 500)
         campo.isBordered = false
         campo.drawsBackground = true
         campo.focusRingType = .none
@@ -250,9 +488,10 @@ final class CampoNumero: NSView {
         marco.wantsLayer = true
         marco.layer?.cornerRadius = 7
         marco.layer?.cornerCurve = .continuous
-        marco.layer?.backgroundColor = tema.lienzo.cgColor
-        marco.layer?.borderWidth = 1
+        marco.layer?.backgroundColor = NSColor.clear.cgColor
+        marco.layer?.borderWidth = 0
         marco.layer?.borderColor = tema.rol("card").trazo.color.cgColor
+        arriba.plano = true; abajo.plano = true
         arriba.tema = tema; abajo.tema = tema
     }
 }
@@ -333,7 +572,14 @@ final class BarraContextual: NSView {
         wantsLayer = true
     }
 
-    override func draw(_ r: NSRect) { Estilo.pintarBisel(self, tema, radio: 12) }
+    override func draw(_ r: NSRect) {
+        let forma = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 8, yRadius: 8)
+        (tema.nombre == "oscuro" ? NSColor(white: 0.14, alpha: 1) : .white).setFill()
+        forma.fill()
+        tema.cuerpoTexto.withAlphaComponent(0.10).setStroke()
+        forma.lineWidth = 1
+        forma.stroke()
+    }
     required init?(coder: NSCoder) { fatalError() }
 
     /// La barra se traga sus propios clics: sin esto, pulsarla panea el lienzo.
@@ -409,6 +655,8 @@ final class BarraContextual: NSView {
                             _ accion: @escaping () -> Void) -> BotonPlano {
         let w = ancho ?? (texto.isEmpty ? 32 : max(32, texto.size(withAttributes: [.font: Estilo.fuente(12)]).width + 24))
         let b = BotonPlano(icono: icono, titulo: texto, ancho: w, alto: 32)
+        b.plano = true
+        if !texto.isEmpty { b.attributedTitle = NSAttributedString(string: texto, attributes: [.font: Estilo.fuente(12, 500)]) }
         b.tema = tema
         b.activo = activo
         b.globo = globo
@@ -447,7 +695,20 @@ final class BarraContextual: NSView {
     /// no cambió, reconstruir es tirar y rehacer lo mismo.
     private var firmaSeleccion: String = ""
 
-    func reconstruir(caja: CGRect, camara: Camara, viewport: NSSize) {
+    func reconstruir(caja: CGRect, camara: Camara, viewport: NSSize,
+                     conservarPosicion: Bool = false) {
+        let origenAntes = frame.origin
+        func restaurarOrigen() {
+            guard conservarPosicion else { return }
+            // Un control no puede huir de debajo de la mano por el cambio que
+            // EL MISMO acaba de provocar. Al bajar la tipografia, remaquetar
+            // encoge las cajas y la barra antes seguia enseguida la nueva caja:
+            // el siguiente clic caia en el lienzo vacio y borraba la seleccion.
+            // Se conserva el origen, acotado por si cambió el ancho de la barra.
+            frame.origin = NSPoint(
+                x: min(max(8, origenAntes.x), max(8, viewport.width - frame.width - 8)),
+                y: min(max(8, origenAntes.y), max(8, viewport.height - frame.height - 8)))
+        }
         /*
          * ⚠️ UN PANEL ABIERTO NO SE TIRA POR UN CAMBIO QUE ÉL MISMO CAUSÓ.
          *
@@ -466,6 +727,7 @@ final class BarraContextual: NSView {
         let firma = seleccion.map(\.id).sorted().joined(separator: ",")
         if panel != nil, firma == firmaSeleccion, !seleccion.isEmpty {
             colocar(caja: caja, camara: camara, viewport: viewport)
+            restaurarOrigen()
             return
         }
         firmaSeleccion = firma
@@ -473,7 +735,10 @@ final class BarraContextual: NSView {
         subviews.forEach { $0.removeFromSuperview() }
         guard !seleccion.isEmpty else { isHidden = true; return }
         isHidden = false
-        Estilo.tarjeta(self, tema: tema, radio: 12)
+        Estilo.tarjeta(self, tema: tema, radio: 8)
+        layer?.shadowOpacity = 0.10
+        layer?.shadowRadius = 5
+        layer?.shadowOffset = CGSize(width: 0, height: -2)
 
         var piezas: [NSView] = []
         let est = estiloComun
@@ -522,24 +787,27 @@ final class BarraContextual: NSView {
             piezas.append(nuevoBoton(Icono.negrita, activo: negrita, globo: "Negrita  ⌘B") { [weak self] in
                 self?.alTipografia?(Tipografia(peso: negrita ? 400 : 700))
             })
-            piezas.append(nuevoBoton(Icono.cursiva, activo: est.cursiva == true, globo: "Cursiva  ⌘I") { [weak self] in
-                self?.alTipografia?(Tipografia(cursiva: !(est.cursiva ?? false)))
-            })
-            piezas.append(nuevoBoton(Icono.subrayado, activo: est.subrayado == true, globo: "Subrayado  ⌘U") { [weak self] in
-                self?.alTipografia?(Tipografia(subrayado: !(est.subrayado ?? false)))
-            })
             piezas.append(nuevoBoton(Icono.alinear(est.alineacion ?? "center"), activo: abierto == "alinear",
                                      globo: "Alineación") { [weak self] in self?.abrirPanelAlinear() })
 
             let colorTexto = comun(conLetras.isEmpty ? seleccion : conLetras) { $0.colorTexto }
             piezas.append(nuevoBoton(tinte(Icono.colorTexto, colorTexto ?? hex(tema.cuerpoTexto)),
                                      activo: abierto == "texto", globo: "Color del texto") { [weak self] in
-                self?.abrirPanelColor("texto", "Color del texto", Paletas.trazos, colorTexto) { c in ["text": c] }
+                self?.abrirPanelColor("texto", "Color del texto", Paletas.trazos, colorTexto,
+                                      efectivo: self?.tema.cuerpoTexto) { [weak self] c in
+                    self?.alColor?(["text": c])
+                }
             })
             let resaltado = comun(conLetras.isEmpty ? seleccion : conLetras) { $0.resaltado }
             piezas.append(nuevoBoton(tinte(Icono.resaltar, resaltado ?? hex(tema.pieTexto)),
                                      activo: abierto == "resaltar", globo: "Resaltar") { [weak self] in
-                self?.abrirPanelColor("resaltar", "Resaltado", Paletas.resaltados, resaltado, conMarca: false) { c in ["highlight": c] }
+                // El resaltado emite `rgba(...)`: opaco taparia el texto que
+                // esta ahi justo para que se lea.
+                self?.abrirPanelColor("resaltar", "Resaltado", Paletas.resaltados, resaltado,
+                                      conMarca: false, efectivo: NSColor(hex: "#ffe050"),
+                                      alfa: 0.55) { [weak self] c in
+                    self?.alColor?(["highlight": c])
+                }
             })
         }
 
@@ -558,7 +826,12 @@ final class BarraContextual: NSView {
                 piezas.append(nuevoBoton(tinte(Icono.rellenoIcono, relleno ?? hex(ef)),
                                          activo: abierto == "relleno", globo: "Relleno") { [weak self] in
                     self?.abrirPanelColor("relleno", "Relleno", Paletas.rellenos, relleno, redondo: true,
-                                          nota: "Un color elegido a mano deja de seguir al tema. Vuelve a la primera casilla para devolvérselo al rol.") { c in ["fill": c] }
+                                          nota: "Un color elegido a mano deja de seguir al tema. Vuelve a la primera casilla para devolvérselo al rol.",
+                                          // Todas las muestras del relleno son claras: el
+                                          // primer toque del cuadro cae en pastel, no en neón.
+                                          efectivo: ef, puntoNuevo: NSPoint(x: 0.30, y: 0)) { [weak self] c in
+                        self?.alColor?(["fill": c])
+                    }
                 })
             }
         }
@@ -574,14 +847,24 @@ final class BarraContextual: NSView {
         // ── TINTA ───────────────────────────────────────────────────────────
         if seleccion.allSatisfy({ $0.tipo == "ink" }) {
             piezas.append(separador())
+            /*
+             * ⚠️ CINCO COLORES SUELTOS EN LA BARRA, NO.
+             *
+             * Un trazo ya dibujado tenia menos colores para repintarse que una
+             * caja: cinco discos en fila contra las dieciocho muestras y el
+             * arcoiris del panel de relleno. Y la barra pagaba 168 px por esos
+             * cinco. Ahora es UN boton con el mismo panel que todo lo demas —
+             * misma paleta, mismo espectro, misma primera casilla que devuelve
+             * la tinta al tema.
+             */
             let actual = comun(seleccion) { $0.colorTinta }
-            for c in [nil, "#8C27F1", "#dc2626", "#0d9488", "#2563eb", "#d97706"] as [String?] {
-                let b = nuevoBoton(muestraColor(c ?? hex(tema.tinta), marcada: actual == c), ancho: 28,
-                                   globo: c ?? "Tinta del tema") { [weak self] in
+            piezas.append(nuevoBoton(muestraColor(actual ?? hex(tema.tinta), marcada: actual != nil),
+                                     activo: abierto == "tinta", globo: "Color de la tinta") { [weak self] in
+                self?.abrirPanelColor("tinta", "Tinta", Paletas.trazos, actual, redondo: true,
+                                      efectivo: self?.tema.tinta) { [weak self] c in
                     self?.alCambiar?(["color": c.map { Json.texto($0) } ?? nil], { $0.tipo == "ink" })
                 }
-                piezas.append(b)
-            }
+            })
             piezas.append(separador())
             let g = comun(seleccion) { $0.grosorTinta }
             for s in [3.0, 6.0, 12.0] {
@@ -663,10 +946,11 @@ final class BarraContextual: NSView {
         let ancho = x + 5
 
         colocar(caja: caja, camara: camara, viewport: viewport, ancho: ancho)
+        restaurarOrigen()
     }
 
-    /* DONDE VA. Debajo de la caja de la seleccion, centrada en ella. Si no
-       cabe abajo salta arriba; si tampoco (elemento mas alto que la
+    /* DONDE VA. Arriba de la caja de la selección, centrada en ella. Si no
+       cabe arriba salta abajo; si tampoco (elemento mas alto que la
        pantalla) se pega al borde inferior — porque una barra fuera de la
        pantalla es una barra que no existe.
 
@@ -685,7 +969,7 @@ final class BarraContextual: NSView {
         // "debajo del elemento" es una Y MENOR.
         let yInf = viewport.height - inf.y - Self.AIRE - Self.ALTO
         let ySup = viewport.height - sup.y + Self.AIRE
-        let crudo = yInf > 8 ? yInf : (ySup + Self.ALTO < viewport.height - 8 ? ySup : 10)
+        let crudo = ySup + Self.ALTO < viewport.height - 8 ? ySup : (yInf > 8 ? yInf : 10)
         /* ACOTADA A LA PANTALLA, SIEMPRE. Sin este acote, elegir algo y panear
            hasta sacarlo de vista se lleva la barra con el — y lo que ves es que
            la barra "desaparecio", no que el elemento se fue. */
@@ -843,26 +1127,92 @@ final class BarraContextual: NSView {
         }
     }
 
+    /**
+     * El panel de color: muestras arriba, espectro debajo.
+     *
+     * `aplicar` es generico a proposito. La mayoria de los colores viven dentro
+     * del objeto `color` del elemento y se escriben con `alColor`, pero la TINTA
+     * guarda el suyo en un campo suelto — y tener dos paneles casi iguales para
+     * eso fue justo lo que dejo al lapiz con gradiente y a todo lo demas sin el.
+     */
     private func abrirPanelColor(_ id: String, _ titulo: String, _ muestras: [Muestra], _ valor: String?,
                                  redondo: Bool = false, conMarca: Bool = true, nota: String? = nil,
-                                 _ campo: @escaping (String?) -> [String: String?]) {
-        let altoPaleta = VistaPaleta.alto(muestras.count, conMarca: conMarca)
-        let altoNota: CGFloat = nota != nil ? 46 : 0
+                                 efectivo: NSColor? = nil, alfa: Double? = nil,
+                                 puntoNuevo: NSPoint = NSPoint(x: 0.85, y: 0.15),
+                                 _ aplicar: @escaping (String?) -> Void) {
+        let altoPaleta = VistaPaleta.alto(muestras.count, conMarca: conMarca,
+                                          conEspectro: true, conRecientes: true)
+        /*
+         * ⚠️ EL ALTO DE LA NOTA SE MIDE, no se estima.
+         *
+         * Estaba clavado en 46 y la nota del relleno son cinco líneas: la
+         * tarjeta cortaba el texto en "Vuelve a la primera" y la frase perdía
+         * justo la mitad que dice QUÉ hacer. Un número mágico al lado de un
+         * texto que se edita se desincroniza en cuanto alguien toca el texto.
+         */
+        let fuenteNota = Estilo.fuente(10, 500)
+        let altoNota: CGFloat = nota.map {
+            ceil(($0 as NSString).boundingRect(
+                with: NSSize(width: CGFloat(6 * 30), height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: fuenteNota]).height) + 14
+        } ?? 0
         abrirPanel(id, ancho: 6 * 30 + 22, alto: altoPaleta + 34 + altoNota, desdeX: -70) { v in
             let r = rotulo(titulo); r.frame.origin = NSPoint(x: 10, y: v.frame.height - 22); v.addSubview(r)
             let p = VistaPaleta(frame: NSRect(x: 10, y: altoNota + 6, width: 6 * 30, height: altoPaleta))
             p.tema = tema; p.muestras = muestras; p.valor = valor
             p.redondo = redondo; p.conMarca = conMarca
-            p.alElegir = { [weak self] c in self?.alColor?(campo(c)) }
+            p.conEspectro = true; p.efectivo = efectivo; p.alfa = alfa
+            p.puntoNuevo = puntoNuevo
+            // Cada panel recuerda LO SUYO: los pasteles del relleno no valen
+            // para el trazo, ni el `rgba` del resaltado para nada mas.
+            p.ambito = id
+            p.alElegir = { c in aplicar(c) }
+            p.alAbrirGesto = { [weak self] in self?.alAbrirGesto?() }
+            p.alCerrarGesto = { [weak self] _ in self?.alCerrarGesto?(titulo.lowercased()) }
             v.addSubview(p)
+            montarCampoHex(en: v, paleta: p, efectivo: efectivo)
             if let n = nota {
                 let t = NSTextField(wrappingLabelWithString: n)
-                t.font = Estilo.fuente(10, 500)
+                t.font = fuenteNota
                 t.textColor = tema.pieTexto
-                t.frame = NSRect(x: 10, y: 6, width: 6 * 30, height: altoNota - 8)
+                t.frame = NSRect(x: 10, y: 8, width: 6 * 30, height: altoNota - 14)
                 v.addSubview(t)
             }
         }
+    }
+
+    /**
+     * EL CAMPO HEX va ENCIMA de su caja, no dentro de la vista pintada.
+     *
+     * Escribir necesita un `NSTextField` de verdad —cursor, selección, pegar—;
+     * el recuadro lo pinta la paleta para que case con el resto del cromo, que
+     * no se puede pedir a un control del sistema. Y se monta desde AQUÍ para los
+     * dos sitios que abren paleta: tenerlo solo en uno fue lo que dejó al panel
+     * de contorno con una caja bonita que no escribía nada.
+     */
+    private func montarCampoHex(en v: NSView, paleta p: VistaPaleta, efectivo: NSColor?) {
+        let campo = NSTextField(frame: .zero)
+        campo.font = Estilo.mono(11, 600)
+        campo.alignment = .left
+        campo.isBordered = false
+        campo.drawsBackground = false
+        campo.focusRingType = .none
+        // El placeholder es el color que se ESTÁ VIENDO: aunque el elemento siga
+        // a su rol, ahí se lee qué tono tiene ahora mismo.
+        campo.placeholderString = efectivo.map { Espectro.hex($0) } ?? "#rrggbb"
+        campo.stringValue = p.valor ?? ""
+        campo.textColor = tema.cuerpoTexto
+        // ⚠️ El marco se traduce: la paleta está VOLTEADA y el panel no, así que
+        // la Y del campo se mide desde abajo de la paleta.
+        let e = p.cajaExacto
+        campo.frame = NSRect(x: p.frame.minX + 8, y: p.frame.maxY - e.maxY + 4,
+                             width: e.width - 42, height: 17)
+        let puente = PuenteCampo(paleta: p, campo: campo)
+        campo.delegate = puente
+        p.puenteCampo = puente
+        p.alCambiarValor = { [weak campo] val in campo?.stringValue = val ?? "" }
+        v.addSubview(campo)
     }
 
     private func abrirPanelContorno() {
@@ -870,7 +1220,8 @@ final class BarraContextual: NSView {
         let efectivo = ref.map { tema.contorno($0) } ?? Trazo(color: tema.cuerpoTexto, grosor: 1.5, estilo: "solid")
         let radioEf = ref.map { tema.radio($0) } ?? 12
         let opacidad = comun(seleccion) { $0.opacidad } ?? 1
-        let altoPaleta = VistaPaleta.alto(Paletas.trazos.count, conMarca: true)
+        let altoPaleta = VistaPaleta.alto(Paletas.trazos.count, conMarca: true,
+                                          conEspectro: true, conRecientes: true)
         abrirPanel("contorno", ancho: 236, alto: altoPaleta + 262, desdeX: -100) { v in
             var y = v.frame.height - 22
             func rot(_ s: String) { let r = rotulo(s); r.frame.origin = NSPoint(x: 12, y: y); v.addSubview(r); y -= 8 }
@@ -922,8 +1273,12 @@ final class BarraContextual: NSView {
             p.tema = tema; p.muestras = Paletas.trazos
             p.valor = comun(conTrazo) { $0.contorno }
             p.redondo = true
+            p.conEspectro = true; p.efectivo = efectivo.color; p.ambito = "contorno"
             p.alElegir = { [weak self] c in self?.alColor?(["stroke": c]) }
+            p.alAbrirGesto = { [weak self] in self?.alAbrirGesto?() }
+            p.alCerrarGesto = { [weak self] _ in self?.alCerrarGesto?("contorno") }
             v.addSubview(p)
+            montarCampoHex(en: v, paleta: p, efectivo: efectivo.color)
         }
     }
 
@@ -1070,6 +1425,15 @@ final class BarraContextual: NSView {
          * decisión sobre la ESTRUCTURA, del mismo orden que el apilado, y no
          * una acción destructiva.
          */
+        if conTexto {
+            let est = estiloComun
+            filas.insert(("Cursiva", Icono.cursiva, "⌘I", { [weak self] in
+                self?.alTipografia?(Tipografia(cursiva: !(est.cursiva ?? false)))
+            }), at: 0)
+            filas.insert(("Subrayado", Icono.subrayado, "⌘U", { [weak self] in
+                self?.alTipografia?(Tipografia(subrayado: !(est.subrayado ?? false)))
+            }), at: 1)
+        }
         // RECORTAR, sobre una imagen sola. Se pone lo primero: es lo que se
         // busca aquí cuando se acaba de pegar una captura con su borde.
         if seleccion.count == 1, seleccion[0].tipo == "image" {
@@ -1178,5 +1542,30 @@ final class BarraContextual: NSView {
             c.addPath(camino); c.setStrokeColor(tin.trazo.cgColor); c.setLineWidth(2); c.strokePath()
             return true
         }
+    }
+}
+
+/**
+ * El puente entre el campo de texto del hex y la paleta que lo pinta.
+ *
+ * ⚠️ Un `NSTextField` no retiene a su delegado. Sin alguien que lo sostenga
+ * —aquí, la propia paleta— el puente muere en cuanto termina de construirse el
+ * panel y escribir un color deja de hacer nada, sin error ni aviso.
+ */
+final class PuenteCampo: NSObject, NSTextFieldDelegate {
+    private weak var paleta: VistaPaleta?
+    private weak var campo: NSTextField?
+
+    init(paleta: VistaPaleta, campo: NSTextField) {
+        self.paleta = paleta; self.campo = campo
+        super.init()
+    }
+
+    /// Al confirmar (Enter o salir del campo). Si el texto no vale, el campo
+    /// vuelve a lo que había: dejar escrito un color imposible sería enseñar un
+    /// estado que el documento no tiene.
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard let paleta, let campo else { return }
+        if !paleta.escribir(campo.stringValue) { campo.stringValue = paleta.valor ?? "" }
     }
 }

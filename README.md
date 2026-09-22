@@ -1,164 +1,75 @@
-<img src="assets/sfmap.iconset/icon_128x128.png" width="96" align="right" alt="sfmap">
-
 # sfmap
 
-**El lienzo de sistemas, nativo.** App de escritorio macOS para diseñar los
-sistemas del negocio: los mapas que antes vivían dentro de Arbrain, ahora en su
-propia herramienta.
+Un lienzo nativo para macOS: piensa, dibuja y organiza tu negocio con texto, imágenes, conectores y zoom. Tus mapas se guardan en tu Mac; no necesitas una cuenta ni configurar un servidor.
 
-No reemplaza a Arbrain. Arbrain es el centro de mando; sfmap es la herramienta
-de oficio.
+![Plantilla editable de negocio](templates/tu-negocio/vista-previa.png)
 
----
+## Empieza aquí
 
-## Instalar
+1. **[Descarga sfmap para Mac con Apple Silicon](https://github.com/saas-factory-community/sfmap/releases/tag/v0.2.0)**. Requiere macOS 15 o posterior.
+2. Descomprime el paquete y arrastra `sfmap.app` a **Aplicaciones**.
+3. Abre la app. En el engrane, elige **Importar .sfmap…** y selecciona `Tu-negocio.sfmap`, incluido en la descarga.
+4. Acércate con **⌘ + rueda**, edita un texto con **doble clic** y haz tuyo el mapa.
 
-Tres pasos: compilar, crear las dos tablas, apuntar la app a tu Supabase.
+**Versión de evaluación:** el binario tiene firma local, pero todavía no tiene Developer ID ni notarización de Apple. macOS puede mostrar una advertencia o bloquear la primera apertura. Consulta la [guía de instalación](docs/instalacion.md), que también incluye la opción de compilar desde el código.
 
-**1. Compilar.** Necesitas macOS 15+ y Xcode (o Command Line Tools) con Swift 6.
+## Qué trae esta versión
+
+- **Biblioteca local** con lienzos y carpetas. Guardado automático e historial de deshacer durante la sesión.
+- **Plantillas `.sfmap`** editables, con imágenes incluidas. Importar crea una página nueva; tu original se conserva.
+- **Editor visual:** texto enriquecido, formas, flechas, imágenes, lápiz y marcador; agrupación, capas, bloqueo y recorte.
+- **Ajustes de lectura:** minimapa, documentos desactivados por defecto, tema del sistema/claro/oscuro y fondo liso/puntos/cuadrícula.
+- **Navegación por zoom** y enlaces entre elementos. Barra inferior compacta con estado indicado por color.
+- **HTML y documentos locales** para usos avanzados dentro del editor. Los elementos HTML y los widgets conectados aún no se exportan al formato portátil.
+
+### Tu negocio, de punta a punta
+
+La [plantilla incluida](templates/tu-negocio) reúne cliente, oferta, producto, canales y recorrido de entrega. Tiene **200 elementos nativos editables**. Completa primero **A quién**, **Qué cambio** y **Cómo lo entregas**; después elige un canal de adquisición.
+
+[Descargar solo la plantilla](https://github.com/saas-factory-community/sfmap/releases/download/v0.2.0/Tu-negocio.sfmap) · [Cómo utilizarla](templates/tu-negocio/README.md)
+
+## Controles esenciales
+
+| Acción | Control |
+| --- | --- |
+| Mover el lienzo | Rueda / dos dedos; espacio + arrastrar |
+| Acercar / alejar | ⌘ + rueda |
+| Encuadrar contenido | ⇧1 |
+| Volver al 100% | 0 |
+| Editar texto | Doble clic / Intro |
+| Seleccionar / nota / texto | V / N / L |
+| Rectángulo / círculo / conector | R / O / C |
+| Lápiz / marcador / goma | P / M / E |
+| Deshacer / rehacer | ⌘Z / ⇧⌘Z |
+| Cambiar tema | T |
+| Compartir copia editable | Engrane → Descargar lienzo… |
+| Ver todos los atajos | ⌘/ |
+
+Tus archivos viven en `~/Library/Application Support/sfmap/Biblioteca`. La biblioteca local no se sincroniza sola entre Macs. Para compartir, exporta un `.sfmap`; para respaldo, conserva también la carpeta `Imagenes` junto a `Biblioteca`.
+
+## Compilar desde el código
+
+Necesitas macOS 15+ y herramientas de desarrollo con **Swift 6**:
 
 ```bash
 git clone https://github.com/saas-factory-community/sfmap.git
 cd sfmap
-./scripts/package.sh          # compila, genera el icono, firma e instala
-open ~/Applications/sfmap.app
+swift run SFMap --local
 ```
 
-**2. Tu backend.** sfmap no trae servidor: guarda tus lienzos en **tu propio**
-proyecto de Supabase (el plan gratis alcanza de sobra). Pega
-[`supabase/esquema.sql`](supabase/esquema.sql) en el SQL Editor y quedan las dos
-tablas que la app usa, `draw` y `draw_folders`.
+Para probar el código: `swift test`. Para producir una `.app` con una identidad de firma estable propia:
 
-**3. La credencial.** Crea `~/.sfmap/env` con la URL y la anon key de tu proyecto:
-
-```
-MC_SUPABASE_URL=https://TU-PROYECTO.supabase.co
-MC_SUPABASE_KEY=TU_ANON_KEY
+```bash
+SFMAP_IDENTITY="Nombre de tu certificado" bash scripts/package.sh --no-install
 ```
 
-**La credencial nunca se hornea en el bundle**: una llave dentro de un `.app`
-viaja con el `.app`. Si algo falla, la app lo dice en `stderr` con el prefijo
-`[sfmap]` — abre la Consola y filtra por ahí; el silencio no es una opción.
+El resultado queda en `dist/sfmap.app`. Sin `--no-install`, el script instala en `~/Applications` y conserva la versión anterior en `dist/previous`. No crea firmas ad hoc ni incluye credenciales.
 
-### Qué es esto y qué no
+## Más información
 
-Es la herramienta con la que Daniel dibuja los sistemas de su negocio, entregada
-**tal cual la usa**, no un producto empaquetado. Dos cosas que conviene saber
-antes de abrirla:
+- [Instalación, respaldo y solución de problemas](docs/instalacion.md)
+- [Formato portátil y comandos](docs/portabilidad.md)
+- [Nube e integraciones opcionales](docs/integraciones.md)
+- [Cambios de la versión](CHANGELOG.md)
 
-- **La pared del día es una PLANTILLA.** `Sources/SFMap/Dia/NucleoMonkMode.swift`
-  y `NucleoHabitos.swift` traen un reto, una rutina y unos hábitos de ejemplo.
-  Son datos, no programa: cámbialos por los tuyos y la pared se pinta sola. Están
-  marcados con `── TUYO:` para que los encuentres.
-- **Crear diagramas nuevos necesita el compilador**, que es un servicio Node
-  aparte (`POST localhost:3000/api/canvas/region`). Sin él sfmap abre, lee,
-  mueve, borra y guarda lo que ya existe; lo que no puede es componer un
-  diagrama desde cero. Se explica abajo, en "Cómo está hecho".
-
-## Usar
-
-| Gesto | Qué hace |
-|---|---|
-| arrastrar en vacío | seleccionar |
-| ⌥ + arrastrar · botón central | panear |
-| arrastrar un elemento | moverlo (se guarda solo, 0.6 s después de soltar) |
-| ⇧ + clic | añadir o quitar de la selección |
-| pellizco · ⌘ + rueda | zoom |
-| `0` | tamaño real |
-| `⇧1` | encuadrar (la selección, o todo) |
-| `⌘R` | recompilar y recargar la página |
-
-Abrir una página concreta: `open -a sfmap --args <pageId>`.
-
-## Lo que hace hoy
-
-Abre y lista tus lienzos y carpetas · pinta figuras, texto, tinta, secciones y
-conectores con los roles y el tema del sistema · sigue el claro/oscuro de macOS
-· pan, zoom, encuadrar · seleccionar y arrastrar · **goma de área con alcance
-(solo tinta / todo), que marca mientras barre y borra al soltar** · guarda sin
-destruir · recuerda dónde lo dejaste.
-
-## Lo que NO hace todavía
-
-Crear elementos · editar texto · deshacer · llamar al compilador desde la app.
-Los diagramas se siguen generando por `POST localhost:3000/api/canvas/region`
-(ver la skill `canvas` del repo business-os).
-
----
-
-## Cómo está hecho
-
-```
-SUPERFICIE (Swift, este repo)      COMPILADOR (Node, en arbrain/)
-pintar · pan · zoom · arrastre     medir texto · componer · dagre · rutear
-120 veces por segundo              una vez por diagrama, 110 ms
-```
-
-Reescribir el compilador en Swift serían meses —dagre y la medición de fuentes
-con fontkit— para ganar en el único eje que no aprieta. La superficie sí gana:
-un `NSEvent` toca la cámara y el frame siguiente ya salió, sin bucle de eventos
-de navegador, sin React y sin recolector de basura en medio.
-
-**No usa Metal, y es a propósito.** Un lienzo de cientos de elementos con texto
-real no está limitado por relleno de píxeles sino por composición de texto, que
-CoreText resuelve en CPU de todas formas. Metal añadiría un atlas de glifos y
-su invalidación para ganar donde no duele. Si algún día el cuello se **mide** en
-rasterizado, se cambia.
-
-| Archivo | Qué es |
-|---|---|
-| `Json.swift` | valor JSON que conserva lo que no entiende |
-| `Modelo.swift` | el elemento: JSON crudo con accesos tipados |
-| `Tema.swift` | rol → pintura, claro y oscuro |
-| `Fuentes.swift` | los `.ttf` variables, los mismos que mide el compilador |
-| `Pintor.swift` | documento → píxeles, CoreGraphics + CoreText |
-| `Lienzo.swift` | la vista: eventos, cámara, selección, arrastre |
-| `Nube.swift` | leer y escribir la tabla `draw` |
-| `main.swift` | ventana, barra, menú |
-
-## El icono
-
-`assets/logo.svg` es la fuente. El icono **es lo que la app hace**: tres nodos
-unidos por codos ortogonales, que es la gramática que dibuja el compilador.
-Morado en los nodos, oro en las aristas — la materia y la relación, la misma
-repartición que usa el lienzo.
-
-`scripts/package.sh` lo regenera cuando el SVG es más nuevo que el `.icns`:
-rasteriza con WebKit (siempre está en macOS, no hace falta instalar nada),
-**verifica que cada PNG mida lo que su nombre dice**, arma el `.icns` y refresca
-la caché de LaunchServices.
-
----
-
-## Invariantes (romperlos cuesta caro)
-
-1. **Es el MISMO documento que el lienzo web.** Los elementos guardan su JSON
-   crudo (`Elemento.crudo`) y al guardar se re-emite entero, así que un campo
-   que sfmap aún no conoce SOBREVIVE. Decodificar a una struct cerrada y
-   re-serializar lo borraría en silencio — así vació el v3 su capa `regions`.
-2. **Guardar re-lee `regions`** antes de escribir y compara `agent_version`.
-   Cero filas afectadas es ERROR, jamás un "guardado" silencioso.
-3. **Las fuentes son los MISMOS `.ttf`** que mide el compilador. Una fuente
-   parecida daría un ancho distinto del que la caja declara, y el texto se
-   saldría o quedaría corto sin que nada falle.
-4. **Firma con identidad estable (`SFlow Dev`), nunca ad-hoc.** La ad-hoc ancla
-   los permisos del sistema al hash del binario: cada rebuild los revoca en
-   silencio, con Ajustes mostrándolos concedidos igual.
-5. **Nunca pedir `page_elements` para LISTAR.** Medido: 31.92 MB / 8.0 s contra
-   0.02 MB / 0.56 s. Factor 1,600 en lo primero que hace la app.
-6. **El candado manda.** Un elemento bloqueado no se mueve al arrastrar.
-
-## Bitácora de fallos (lo que costó descubrirlos)
-
-Todos aparecieron **midiendo**, ninguno razonando. Están aquí para que no
-vuelvan.
-
-| Fallo | Causa | Cómo se veía |
-|---|---|---|
-| Icono genérico en el Dock | `snapshotWidth` de WebKit está en PUNTOS: en Retina cada PNG salió al doble. `icon_128x128.png` medía 256 | macOS no encontraba ningún tamaño que buscaba y caía al genérico. El rasterizador imprimía `✓ 128px` igual |
-| Falta `icon_32x32@2x` | El nombre `@2x` se derivaba dividiendo entre dos: producía `icon_64x64@2x` (inválido) y se saltaba el que sí hacía falta | Una regla que casi acierta es peor que una tabla de diez líneas |
-| Icono recortado | El SVG declara 1024 y WebKit respeta su tamaño natural: en un viewport de 256 solo cabía la esquina | Se arregló envolviéndolo en un HTML que lo escala |
-| 8 segundos para abrir | La lista pedía `page_elements` de las 129 páginas solo para poner un número al lado de cada nombre | 31.92 MB por un contador |
-| El desplegable decía otra página | `NSPopUpButton.addItem(withTitle:)` ELIMINA cualquier item con ese título antes de añadir: dos lienzos que se muestran igual corren todos los índices | Ahora cada item lleva su `representedObject` |
-| La carga fallaba en silencio | Ni error en pantalla ni línea en consola | Por eso existe `traza()` |
-| `codesign` rechazaba el bundle | El bundle de recursos de SwiftPM en `Contents/MacOS/` invalida la firma. Y `Bundle.module` hace `fatalError` si falta | Un solo camino de carga: `Contents/Resources/fuentes` |
+Hecho para la comunidad [SaaS Factory](https://saasfactory.so).

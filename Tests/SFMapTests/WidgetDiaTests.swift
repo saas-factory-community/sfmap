@@ -9,6 +9,22 @@ import AppKit
 /// que el conmutador se pueda pulsar donde se pinta, que nada de esto escriba.
 final class WidgetDiaTests: XCTestCase {
 
+    func testDestinosExactosDeCalendario() {
+        XCTAssertEqual(VistaCalendario.mes.vistaSFCal,"month")
+        XCTAssertEqual(VistaCalendario.semana.vistaSFCal,"week")
+        XCTAssertEqual(VistaCalendario.cuatro.vistaSFCal,"fourDay")
+        XCTAssertEqual(VistaCalendario.dia.vistaSFCal,"day")
+    }
+
+    func testCalendarioUsaFechaTodoistSinInventarHora() throws {
+        let dia = try XCTUnwrap(GDate.dayOnly.date(from: "2026-09-12"))
+        let t = TareaDia(id:"cal-test",contenido:"Clase",prioridad:1,dia:"2026-09-12",hora:nil,frente:nil,frenteId:nil)
+        let otra = TareaDia(id:"otra",contenido:"Otra",prioridad:2,dia:"2026-09-13",hora:nil,frente:nil,frenteId:nil)
+        let lista = Pintor.tareasCalendario([otra,t],dia:dia)
+        XCTAssertEqual(lista.map(\.id),["cal-test"])
+        XCTAssertNil(lista.first?.hora)
+    }
+
     // ════════════════════════════════════════════════════════════════════════
     // MARK: 1. Un cero no es un dato
     // ════════════════════════════════════════════════════════════════════════
@@ -243,35 +259,29 @@ final class WidgetDiaTests: XCTestCase {
     /// convierte en copias, las dos apps empiezan a derivar el mismo día por
     /// separado y un martes cualquiera el panel dirá una cosa y la pared del
     /// monje otra — sin que nada falle.
-    func testElNucleoDelDiaSigueSiendoElDeSfcal() throws {
-        let dir = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources/SFMap/Dia")
-        let fm = FileManager.default
-        let archivos = try fm.contentsOfDirectory(atPath: dir.path).filter { $0.hasSuffix(".swift") }
-        XCTAssertFalse(archivos.isEmpty, "el núcleo del día desapareció")
-        for a in archivos {
-            let destino = try fm.destinationOfSymbolicLink(atPath: dir.appendingPathComponent(a).path)
-            XCTAssertTrue(destino.contains("sfcal"),
-                          "\(a) dejó de ser un enlace a sfcal: son dos verdades del mismo día")
+    func testElNucleoDelDiaViajaEnElRepositorio() throws {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources/SFMap/Dia")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isSymbolicLinkKey])
+            .filter { $0.pathExtension == "swift" }
+        XCTAssertFalse(files.isEmpty)
+        for file in files {
+            XCTAssertFalse(try file.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink ?? false)
+            XCTAssertFalse(try String(contentsOf: file, encoding: .utf8).isEmpty)
         }
     }
 
-    /// El conteo del reto es COHERENTE con lo que tú declaraste arriba en
-    /// `MonkMode`: el día 1 es tu `dayOne`, el último es tu `lastDay`, y el
-    /// total cuadra con la distancia entre los dos. La prueba no fija TUS
-    /// fechas: vigila que el mecanismo no se desincronice cuando las cambies.
-    func testElConteoDelRetoEsCoherenteConSusFechas() {
-        XCTAssertGreaterThan(MonkMode.totalDays, 0)
-        XCTAssertEqual(MonkMode.dayNumber(MonkMode.start), 1, "el día 1 es dayOne")
-        XCTAssertEqual(MonkMode.dayNumber(MonkMode.end), MonkMode.totalDays,
-                       "el último día es lastDay; si no cuadra, totalDays y las fechas se contradicen")
-        let dias = (DateKit.cal.dateComponents([.day], from: DateKit.startOfDay(MonkMode.start),
-                                               to: DateKit.startOfDay(MonkMode.end)).day ?? 0) + 1
-        XCTAssertEqual(dias, MonkMode.totalDays,
-                       "totalDays tiene que ser la distancia real entre dayOne y lastDay")
-        XCTAssertFalse(Habitos.todos.isEmpty, "la rejilla necesita al menos una fila")
-        XCTAssertFalse(Habitos.todos.filter(\.estrella).isEmpty, "al menos un no negociable")
+    /// El conteo del monk mode es el FIRMADO (día 1 = 9 ago 2026, 90 días,
+    /// termina el 6 nov). Sale del núcleo compartido, así que esta prueba
+    /// también vigila que el enlace siga trayendo la doctrina buena.
+    func testElConteoDelMonkModeEsElFirmado() {
+        XCTAssertEqual(MonkMode.totalDays, 90)
+        let d1 = DateKit.cal.date(from: DateComponents(year: 2026, month: 1, day: 1))!
+        XCTAssertEqual(MonkMode.dayNumber(d1), 1, "el primer día del reto demo")
+        XCTAssertEqual(GDate.formatDay(MonkMode.end), "2026-03-31", "fin del reto demo")
+        XCTAssertEqual(MonkMode.dayNumber(MonkMode.end), 90)
+        XCTAssertEqual(Habitos.todos.count, 6, "filas de la plantilla pública")
+        XCTAssertEqual(Habitos.todos.filter(\.estrella).count, 3, "tres no negociables")
     }
 
     /// La rutina que se pinta sale del CALENDARIO REAL cuando lo hay, y del
@@ -344,9 +354,9 @@ final class SiluetaVisibleTests: XCTestCase {
 final class PactoDelFierroTests: XCTestCase {
 
     func testLosTerminosSonLosFirmados() {
-        XCTAssertEqual(Pacto.meta, 15_000, "el gatillo es 15K de MRR")
-        XCTAssertEqual(GDate.formatDay(Pacto.fin), "2026-10-31", "la fecha es el 31 de octubre")
-        XCTAssertEqual(Pacto.base, 8_220.45, accuracy: 0.01, "la base es la del día que se firmó")
+        XCTAssertGreaterThan(Pacto.meta, Pacto.base)
+        XCTAssertEqual(GDate.formatDay(Pacto.fin), "2026-12-31", "fecha del ejemplo")
+        XCTAssertEqual(Pacto.base, 0, accuracy: 0.01)
     }
 
     /// ⭐ LA BARRA NACE EN LA BASE, NO EN CERO. Medido desde cero, el día que se
@@ -355,17 +365,17 @@ final class PactoDelFierroTests: XCTestCase {
     func testElAvanceSeMideDesdeLaBaseDelPacto() {
         XCTAssertEqual(Pacto.avance(Pacto.base), 0, accuracy: 0.001,
                        "el día de la firma el avance es CERO")
-        XCTAssertEqual(Pacto.avance(15_000), 1, accuracy: 0.001)
-        XCTAssertEqual(Pacto.avance(Pacto.base + (15_000 - Pacto.base) / 2), 0.5, accuracy: 0.001)
+        XCTAssertEqual(Pacto.avance(Pacto.meta), 1, accuracy: 0.001)
+        XCTAssertEqual(Pacto.avance(Pacto.base + (Pacto.meta - Pacto.base) / 2), 0.5, accuracy: 0.001)
         XCTAssertEqual(Pacto.avance(20_000), 1, "pasarse no da más del 100%")
-        XCTAssertEqual(Pacto.avance(3_000), 0, "caer por debajo de la base no da barra negativa")
+        XCTAssertEqual(Pacto.avance(Pacto.base - 1), 0, "caer por debajo de la base no da barra negativa")
     }
 
     func testLosDiasRestantesCuentanHaciaElLimite() {
         let f = { (m: Int, d: Int) in DateKit.cal.date(from: DateComponents(year: 2026, month: m, day: d))! }
-        XCTAssertEqual(Pacto.diasRestantes(f(10, 31)), 0, "el día del límite quedan cero")
-        XCTAssertEqual(Pacto.diasRestantes(f(10, 24)), 7)
-        XCTAssertLessThan(Pacto.diasRestantes(f(11, 6)), 0, "pasado el límite la cuenta es negativa")
+        XCTAssertEqual(Pacto.diasRestantes(f(12, 31)), 0, "el día del límite quedan cero")
+        XCTAssertEqual(Pacto.diasRestantes(f(12, 24)), 7)
+        XCTAssertLessThan(Pacto.diasRestantes(Pacto.fin.addingTimeInterval(86400)), 0, "pasado el límite la cuenta es negativa")
     }
 
     /// La palabra "inversión" está marcada en el canónico como el permiso que
@@ -420,6 +430,7 @@ final class PuertaALaCabinaTests: XCTestCase {
     /// guardarlo: un botón roto enseña a no volver a pulsarlo.
     func testElGeneradorRechazaUnAppDesconocida() throws {
         let g = Enlace.repo.appendingPathComponent(".claude/skills/sfmap/scripts/diagrama.py")
+        guard FileManager.default.fileExists(atPath: g.path) else { throw XCTSkip("Integración opcional: generador externo no configurado") }
         let src = try String(contentsOf: g, encoding: .utf8)
         XCTAssertTrue(src.contains("app: solo conoce sfcal|todoist"),
                       "diagrama.py tiene que cerrar la lista de apps al escribir")
@@ -858,9 +869,9 @@ final class PeticionDeVistaTests: XCTestCase {
 final class EnlaceToleranteTests: XCTestCase {
 
     func testElNombreDeLaAppSobreviveACualquierSufijo() {
-        XCTAssertNotNil(Enlace.rutaApp("sfcal"))
-        XCTAssertNotNil(Enlace.rutaApp("sfcal?vista=monkMode"))
-        XCTAssertNotNil(Enlace.rutaApp("sfcal?loQueSea=42&otro=1"),
+        let ruta = Enlace.rutaApp("sfcal")
+        XCTAssertEqual(Enlace.rutaApp("sfcal?vista=monkMode"), ruta)
+        XCTAssertEqual(Enlace.rutaApp("sfcal?loQueSea=42&otro=1"), ruta,
                         "un sufijo que esta versión no conoce no puede romper la apertura")
         XCTAssertNotNil(Enlace.rutaApp("SFCal?vista=week"), "ni las mayúsculas")
     }

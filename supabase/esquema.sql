@@ -1,57 +1,43 @@
--- ESQUEMA MÍNIMO PARA sfmap
--- ---------------------------------------------------------------------------
--- sfmap no trae backend: guarda tus lienzos en TU propio Supabase. Pega esto en
--- el SQL Editor de tu proyecto y listo. Después pon la URL y la anon key en
--- ~/.sfmap/env (ver el README).
---
--- Son dos tablas: una para las páginas (los lienzos) y otra para las carpetas.
+-- OPCIONAL: backend personal dedicado. La app funciona localmente sin esto.
+-- Revisar antes de ejecutar. No se aplica automáticamente.
+-- Usa service_role solo en tu equipo; no distribuyas esa clave ni desactives RLS.
 
-create table if not exists draw_folders (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  -- carpetas anidadas: una carpeta puede vivir dentro de otra
-  parent_id   uuid references draw_folders(id) on delete cascade,
-  created_at  timestamptz not null default now()
+create table if not exists public.draw_folders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  name text not null,
+  parent_id uuid references public.draw_folders(id) on delete set null,
+  created_at timestamptz not null default now()
 );
 
-create table if not exists draw (
-  page_id        uuid primary key default gen_random_uuid(),
-  name           text not null,
-  folder_id      uuid references draw_folders(id) on delete set null,
-
-  -- EL DOCUMENTO. Un arreglo de elementos en JSON crudo. sfmap lo re-emite
-  -- entero al guardar, así que un campo que la app todavía no conoce SOBREVIVE.
-  page_elements  jsonb not null default '[]'::jsonb,
-
-  -- Capa aparte que escribe el compilador de diagramas. sfmap la RE-LEE antes de
-  -- guardar y nunca la pisa: si la decodificas a una struct cerrada, la borras.
-  regions        jsonb,
-
-  -- Contador optimista. Guardar compara este número; si no coincide, alguien
-  -- más escribió mientras tanto y el guardado se rechaza en vez de aplastar.
-  agent_version  bigint not null default 0,
-
-  -- Dónde dejaste la cámara: {"x":…, "y":…, "zoom":…}
-  settings       jsonb,
-
-  created_at     timestamptz not null default now(),
-  updated_at     timestamptz not null default now()
+create table if not exists public.draw (
+  page_id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  name text not null,
+  folder_id uuid references public.draw_folders(id) on delete set null,
+  page_elements jsonb not null default '{"schemaVersion":4,"elements":[]}'::jsonb,
+  agent_version bigint not null default 0,
+  is_deleted boolean not null default false,
+  settings jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
-create index if not exists draw_folder_id_idx on draw (folder_id);
-create index if not exists draw_folders_parent_id_idx on draw_folders (parent_id);
+-- Compatibilidad aditiva con el esquema de 0.1. No asignar dueño a datos ajenos.
+alter table public.draw add column if not exists user_id uuid;
+alter table public.draw add column if not exists is_deleted boolean not null default false;
+alter table public.draw_folders add column if not exists user_id uuid;
+alter table public.draw alter column page_elements set default '{"schemaVersion":4,"elements":[]}'::jsonb;
+-- Si las tablas ya existían, asigna tus filas antiguas a TU UUID antes de usar
+-- MC_USER_ID. Los NULL quedan fuera de la lista; el script no modifica su dueño.
 
--- ---------------------------------------------------------------------------
--- ACCESO
---
--- sfmap entra con la ANON KEY. Si dejas RLS apagado, cualquiera con esa llave
--- lee y escribe tus lienzos: úsalo solo en un proyecto tuyo y personal.
--- Para algo serio, prende RLS y escribe políticas contra auth.uid():
---
---   alter table draw enable row level security;
---   alter table draw_folders enable row level security;
---   -- y agrega una columna owner uuid references auth.users(id), con políticas
---   -- "owner = auth.uid()" en select/insert/update/delete.
---
--- No lo dejamos hecho a propósito: el modelo de usuarios es TUYO y depende de
--- si esto va a ser una app de una sola persona o de un equipo.
+create index if not exists draw_owner_idx on public.draw (user_id, is_deleted);
+create index if not exists draw_folder_id_idx on public.draw (folder_id);
+create index if not exists draw_folders_owner_idx on public.draw_folders (user_id);
+create index if not exists draw_folders_parent_id_idx on public.draw_folders (parent_id);
+
+alter table public.draw enable row level security;
+alter table public.draw_folders enable row level security;
+-- No se crean políticas para anon/authenticated. La app de esta versión usa
+-- una credencial administrativa de un backend personal, no sesiones de usuarios.
+-- Si ya existen políticas en tu proyecto, revísalas: este script no las borra.

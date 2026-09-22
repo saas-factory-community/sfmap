@@ -29,8 +29,10 @@ extension Markdown {
         let out = NSMutableAttributedString()
 
         func fuente(_ tam: Double, _ peso: Double, cursiva: Bool = false, mono: Bool = false) -> NSFont {
+            // ⌘+ / ⌘− sobre el panel (6 sep 2026): TODA la escala del documento se multiplica,
+            // no un tamaño suelto — la jerarquía (h1 > h2 > cuerpo) se conserva al crecer.
             Fuentes.fuente(familia: mono ? "jetbrains-mono" : "montserrat",
-                           peso: peso, tamano: tam, cursiva: cursiva) as NSFont
+                           peso: peso, tamano: tam * PanelDoc.escala, cursiva: cursiva) as NSFont
         }
 
         func parrafo(_ ajuste: (NSMutableParagraphStyle) -> Void) -> NSParagraphStyle {
@@ -273,15 +275,40 @@ final class VistaDoc: NSTextView {
 
 /// El panel entero: cabecera con la ruta, el texto y su desplazamiento.
 final class PanelDoc: NSView {
+    /// La escala del texto del documento (⌘+ / ⌘− con el puntero sobre el panel; ⌘0 la
+    /// devuelve a 1). Es un ajuste de MANO, no de documento: se recuerda entre sesiones.
+    static var escala: Double = {
+        let g = UserDefaults.standard.double(forKey: "sfmap.docEscala")
+        return g > 0 ? min(1.8, max(0.7, g)) : 1.0
+    }() { didSet { UserDefaults.standard.set(escala, forKey: "sfmap.docEscala") } }
+
+    /// El paso de la escala. Puro para poder probarlo.
+    static func escalar(_ actual: Double, _ paso: Int) -> Double {
+        paso == 0 ? 1.0 : min(1.8, max(0.7, (actual + 0.1 * Double(paso)).rounded(toPlaces: 2)))
+    }
+
+    /// El ancho del panel a partir de la x del puntero en la ventana: el panel vive pegado
+    /// al canto DERECHO, así que el ancho es lo que queda desde el puntero hasta el borde.
+    static func anchoDesde(xVentana: CGFloat, anchoRaiz: CGFloat, escalaUI: CGFloat) -> CGFloat {
+        min(1100, max(320, (anchoRaiz * escalaUI - xVentana) / escalaUI))
+    }
+
+    /// Se dispara mientras el asa izquierda se arrastra, con la x del puntero en la ventana.
+    var alCambiarAncho: ((CGFloat) -> Void)?
+    private let agarre = AgarreLateral()
     private let scroll = NSScrollView()
     private let texto = VistaDoc()
     private let titulo = NSTextField(labelWithString: "")
     private let ruta = NSTextField(labelWithString: "")
     private let cerrar = NSButton()
+    private let recargar = NSButton(title: "Recargar", target: nil, action: nil)
+    private(set) var html: DocumentoHTML?
+    private(set) var esHTML = false
     var tema: Tema = .claro { didSet { aplicarTema() } }
     var alCerrar: (() -> Void)?
     var alAbrirLiga: ((String) -> Void)? { didSet { texto.alAbrirLiga = alAbrirLiga } }
     private(set) var docActual: String?
+    private var contenidoActual: String?
 
     override var isFlipped: Bool { true }
 
@@ -300,6 +327,11 @@ final class PanelDoc: NSView {
         cerrar.imageScaling = .scaleProportionallyDown
         cerrar.target = self
         cerrar.action = #selector(pulsarCerrar)
+        recargar.isBordered = false
+        recargar.font = Estilo.fuente(11, 500)
+        recargar.target = self
+        recargar.action = #selector(recargarHTML)
+        recargar.isHidden = true
 
         texto.isEditable = false
         texto.isSelectable = true
@@ -313,18 +345,26 @@ final class PanelDoc: NSView {
         scroll.drawsBackground = false
         scroll.autohidesScrollers = true
 
-        addSubview(scroll); addSubview(titulo); addSubview(ruta); addSubview(cerrar)
+        addSubview(scroll); addSubview(titulo); addSubview(ruta); addSubview(cerrar); addSubview(recargar)
+        // EL ASA del canto izquierdo (6 sep 2026, pedido de Daniel: «permíteme un resizer»). Es
+        // la MISMA pieza que el panel de lienzos usa en su canto derecho: un estándar de la casa
+        // se llama, no se reinventa.
+        agarre.alArrastrar = { [weak self] xVentana in self?.alCambiarAncho?(xVentana) }
+        addSubview(agarre)
         aplicarTema()
     }
     required init?(coder: NSCoder) { nil }
 
     @objc private func pulsarCerrar() { alCerrar?() }
+    @objc private func recargarHTML() { html?.recargar() }
 
     private func aplicarTema() {
         texto.tema = tema
+        agarre.tema = tema
         titulo.textColor = tema.tituloTexto
         ruta.textColor = tema.pieTexto
         cerrar.image = Estilo.iconoBisel(Icono.equis, tema)
+        recargar.contentTintColor = tema.pieTexto
         needsDisplay = true
     }
 
@@ -344,9 +384,13 @@ final class PanelDoc: NSView {
         super.layout()
         let a: CGFloat = 14
         cerrar.frame = NSRect(x: bounds.width - 30, y: 12, width: 20, height: 20)
-        titulo.frame = NSRect(x: a, y: 10, width: bounds.width - a - 38, height: 18)
-        ruta.frame = NSRect(x: a, y: 30, width: bounds.width - a - 38, height: 14)
+        let controles: CGFloat = esHTML ? 110 : 38
+        titulo.frame = NSRect(x: a, y: 10, width: max(0, bounds.width - a - controles), height: 18)
+        ruta.frame = NSRect(x: a, y: 30, width: max(0, bounds.width - a - 38), height: 14)
+        recargar.frame = NSRect(x: bounds.width - 107, y: 10, width: 69, height: 22)
         scroll.frame = NSRect(x: 0, y: cabecera, width: bounds.width, height: bounds.height - cabecera)
+        html?.frame = NSRect(x: 1, y: cabecera, width: max(0, bounds.width - 1), height: max(0, bounds.height - cabecera))
+        agarre.frame = NSRect(x: 0, y: 0, width: 14, height: bounds.height)   // asa más fácil de agarrar
         texto.frame.size.width = scroll.contentSize.width
         texto.textContainer?.containerSize = NSSize(width: scroll.contentSize.width - 32,
                                                     height: .greatestFiniteMagnitude)
@@ -357,6 +401,9 @@ final class PanelDoc: NSView {
     /// nodo sin liga, porque enseña a no volver a pulsarlo.
     @discardableResult
     func mostrar(_ relativa: String) -> Bool {
+        if ArtefactoHTML.esHTML(relativa) { return mostrarHTML(relativa) }
+        modoHTML(false)
+        contenidoActual=nil
         docActual = relativa
         let url = Enlace.rutaDoc(relativa)
         titulo.stringValue = url.lastPathComponent
@@ -375,4 +422,83 @@ final class PanelDoc: NSView {
         needsLayout = true
         return true
     }
+
+    /// Recompone tanto documentos como fichas al cambiar tema o escala.
+    func refrescarContenido() {
+        if esHTML { return } // cambiar el tema del cromo no recarga ni resetea el HTML
+        if let contenido=contenidoActual {
+            let ancho=max(240,scroll.contentSize.width-32)
+            texto.textStorage?.setAttributedString(Markdown.atribuido(Markdown.analizar(contenido),tema:tema,ancho:ancho))
+        } else if let relativa=docActual { mostrar(relativa) }
+    }
+
+    func mostrarContenido(_ contenido: String, nombre: String, origen: String) {
+        modoHTML(false)
+        docActual=nil
+        contenidoActual=contenido
+        titulo.stringValue=nombre
+        ruta.stringValue=origen
+        let ancho=max(240,scroll.contentSize.width-32)
+        texto.textStorage?.setAttributedString(Markdown.atribuido(Markdown.analizar(contenido),tema:tema,ancho:ancho))
+        texto.scroll(.zero)
+        needsLayout=true
+    }
+
+    private func modoHTML(_ activo: Bool) {
+        esHTML = activo
+        scroll.isHidden = activo
+        html?.isHidden = !activo
+        recargar.isHidden = !activo
+        needsLayout = true
+    }
+
+    private func mostrarHTML(_ relativa: String) -> Bool {
+        docActual = relativa
+        contenidoActual = nil
+        guard let a = ArtefactoHTML.resolver(relativa) else {
+            modoHTML(false)
+            titulo.stringValue = "No se pudo abrir el HTML"
+            ruta.stringValue = relativa
+            texto.textStorage?.setAttributedString(NSAttributedString(
+                string: "No encontré un HTML local legible dentro del repositorio.\n\n\(relativa)",
+                attributes: [.font: Estilo.fuente(14, 500), .foregroundColor: tema.cuerpoTexto]))
+            return false
+        }
+        if html == nil {
+            let vista = DocumentoHTML(frame: .zero)
+            vista.alAbrirLiga = { [weak self] liga in self?.alAbrirLiga?(liga) }
+            vista.alCambiar = { [weak self] in self?.actualizarCabeceraHTML() }
+            addSubview(vista, positioned: .below, relativeTo: agarre)
+            html = vista
+        }
+        modoHTML(true)
+        layoutSubtreeIfNeeded()
+        titulo.stringValue = a.archivo.deletingLastPathComponent().lastPathComponent
+        ruta.stringValue = "Abriendo documento…"
+        html?.abrir(a)
+        actualizarCabeceraHTML()
+        return true
+    }
+
+    private func actualizarCabeceraHTML() {
+        guard esHTML, let html else { return }
+        titulo.stringValue = html.web.title ?? html.artefacto?.archivo.lastPathComponent ?? "Documento HTML"
+        if let error = html.errorCarga { ruta.stringValue = error }
+        else { ruta.stringValue = html.estado == "listo" ? "HTML local · \(docActual ?? "")" : "Abriendo documento…" }
+    }
+
+    func escalarHTML(_ paso: Int) {
+        guard esHTML, let html else { return }
+        html.web.pageZoom = paso == 0 ? 1 : min(2, max(0.5, html.web.pageZoom + Double(paso) * 0.1))
+    }
+
+    static func anchoHTML(_ pedido: CGFloat, raiz: CGFloat) -> CGFloat {
+        // Siempre queda lienzo a la izquierda, incluso al achicar la ventana.
+        min(max(280, raiz - 360), max(320, pedido))
+    }
+}
+
+
+private extension Double {
+    func rounded(toPlaces n: Int) -> Double { let f = pow(10.0, Double(n)); return (self * f).rounded() / f }
 }
