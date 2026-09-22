@@ -156,7 +156,7 @@ extension Pintor {
         // Recorte al marco: un evento que se sale del widget se lee como un
         // error del lienzo, no como una agenda que no cabe.
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: r, cornerWidth: 10, cornerHeight: 10)
+        camino.addRoundedRectSeguro(in: r, cornerWidth: 10, cornerHeight: 10)
         ctx.addPath(camino); ctx.clip()
         switch w.tipo {
         case "calendario": widgetCalendario(r)
@@ -224,7 +224,7 @@ extension Pintor {
 
     func wCaja(_ r: CGRect, radio: Double, relleno: NSColor?, trazo: NSColor? = nil, grosor: Double = 1.5) {
         let p = CGMutablePath()
-        p.addRoundedRect(in: r, cornerWidth: radio, cornerHeight: radio)
+        p.addRoundedRectSeguro(in: r, cornerWidth: radio, cornerHeight: radio)
         if let f = relleno { ctx.addPath(p); ctx.setFillColor(f.cgColor); ctx.fillPath() }
         if let t = trazo {
             ctx.addPath(p); ctx.setStrokeColor(t.cgColor); ctx.setLineWidth(grosor)

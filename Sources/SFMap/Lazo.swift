@@ -233,7 +233,7 @@ enum Lazo {
 
         // ── el comparador: el riel, la referencia, el error ──
         let rl = zonaRiel(e)
-        let pista = CGMutablePath(); pista.addRoundedRect(in: rl, cornerWidth: 8, cornerHeight: 8)
+        let pista = CGMutablePath(); pista.addRoundedRectSeguro(in: rl, cornerWidth: 8, cornerHeight: 8)
         ctx.addPath(pista); ctx.setFillColor(tema.rol("sticky").relleno.cgColor); ctx.fillPath()
         let hRes = rl.height * v.resultado
         let lleno = CGRect(x: rl.minX, y: rl.maxY - hRes, width: rl.width, height: hRes)
@@ -277,7 +277,7 @@ enum Lazo {
 
     private static func boton(_ ctx: CGContext, _ p: Pintor, _ tema: Tema, _ r: CGRect, _ texto: String,
                               relleno: NSColor, texto colorTexto: NSColor, borde: NSColor? = nil, apagado: Bool = false, k: Double = 1) {
-        let camino = CGMutablePath(); camino.addRoundedRect(in: r, cornerWidth: 10 * k, cornerHeight: 10 * k)
+        let camino = CGMutablePath(); camino.addRoundedRectSeguro(in: r, cornerWidth: 10 * k, cornerHeight: 10 * k)
         ctx.addPath(camino); ctx.setFillColor(relleno.withAlphaComponent(apagado ? 0.45 : 1).cgColor); ctx.fillPath()
         if let b = borde { ctx.addPath(camino); ctx.setStrokeColor(b.cgColor); ctx.setLineWidth(2 * k); ctx.strokePath() }
         var est = EstiloTexto(); est.peso = 800; est.tamano = 14 * k

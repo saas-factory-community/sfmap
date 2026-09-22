@@ -524,3 +524,16 @@ enum Geo {
 /// Los cursores que el lienzo usa. Un enum propio para no repartir literales
 /// de AppKit por la maquina de punteros.
 enum NSCursorTipo { case normal, mano, cruz, texto, diagonalNWSE, diagonalNESW, vertical, horizontal }
+
+// macOS 15 exige radios dentro de la caja; versiones posteriores los limitan
+// implícitamente. El dibujo debe conservar el mismo contrato en ambas.
+extension CGMutablePath {
+    func addRoundedRectSeguro(in rect: CGRect, cornerWidth: CGFloat, cornerHeight: CGFloat) {
+        guard rect.width > 0, rect.height > 0,
+              rect.origin.x.isFinite, rect.origin.y.isFinite,
+              rect.width.isFinite, rect.height.isFinite else { return }
+        let rx = cornerWidth.isFinite ? max(0, min(cornerWidth, rect.width / 2)) : 0
+        let ry = cornerHeight.isFinite ? max(0, min(cornerHeight, rect.height / 2)) : 0
+        addRoundedRect(in: rect, cornerWidth: rx, cornerHeight: ry)
+    }
+}

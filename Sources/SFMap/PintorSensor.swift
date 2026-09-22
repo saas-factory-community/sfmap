@@ -119,7 +119,7 @@ extension Pintor {
             let anchoChip = Medidor.medir(d, chip(10)) + 16
             let caja = CGRect(x: r.maxX - pad - anchoChip, y: yCifra + 3, width: anchoChip, height: 19)
             let p = CGMutablePath()
-            p.addRoundedRect(in: caja, cornerWidth: 5, cornerHeight: 5)
+            p.addRoundedRectSeguro(in: caja, cornerWidth: 5, cornerHeight: 5)
             ctx.addPath(p); ctx.setFillColor(t.relleno.cgColor); ctx.fillPath()
             pintarTexto(d, en: CGPoint(x: caja.minX + 8, y: caja.minY + 4),
                         tamano: 10, peso: 700, color: t.etiqueta, mono: true)
@@ -390,7 +390,7 @@ extension Pintor {
             // abre en otro sitio". Se distingue del eslabón (que va a la web)
             // porque aquí el destino es una APP de escritorio.
             let m = CGMutablePath()
-            m.addRoundedRect(in: CGRect(x: c.x - s, y: c.y - s * 0.55, width: s * 1.55, height: s * 1.55),
+            m.addRoundedRectSeguro(in: CGRect(x: c.x - s, y: c.y - s * 0.55, width: s * 1.55, height: s * 1.55),
                              cornerWidth: s * 0.28, cornerHeight: s * 0.28)
             ctx.addPath(m); ctx.strokePath()
             ctx.move(to: CGPoint(x: c.x + s * 0.05, y: c.y - s * 0.05))

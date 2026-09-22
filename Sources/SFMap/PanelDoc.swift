@@ -228,7 +228,7 @@ final class VistaDoc: NSTextView {
                 let c = caja.insetBy(dx: -8, dy: -6)
                 ctx.setFillColor(tema.rol("sensor").relleno.cgColor)
                 let p = CGMutablePath()
-                p.addRoundedRect(in: CGRect(x: 4, y: c.minY, width: bounds.width - 20, height: c.height),
+                p.addRoundedRectSeguro(in: CGRect(x: 4, y: c.minY, width: bounds.width - 20, height: c.height),
                                  cornerWidth: 8, cornerHeight: 8)
                 ctx.addPath(p); ctx.fillPath()
             case "cita":

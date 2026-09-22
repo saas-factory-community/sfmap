@@ -83,7 +83,7 @@ enum Espectro {
 
         func redondeada(_ r: NSRect, _ radio: CGFloat) -> CGMutablePath {
             let p = CGMutablePath()
-            p.addRoundedRect(in: r, cornerWidth: radio, cornerHeight: radio)
+            p.addRoundedRectSeguro(in: r, cornerWidth: radio, cornerHeight: radio)
             return p
         }
 

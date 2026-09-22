@@ -117,13 +117,13 @@ final class Minimapa: NSView {
             case "frame":
                 let tin = tema.tintes[e.tinte] ?? tema.tintes["neutro"]!
                 let camino = CGMutablePath()
-                camino.addRoundedRect(in: r, cornerWidth: 2, cornerHeight: 2)
+                camino.addRoundedRectSeguro(in: r, cornerWidth: 2, cornerHeight: 2)
                 c.addPath(camino); c.setFillColor(tin.relleno.cgColor); c.fillPath()
                 c.addPath(camino); c.setStrokeColor(tin.trazo.withAlphaComponent(0.6).cgColor)
                 c.setLineWidth(0.8); c.strokePath()
             default:
                 let camino = CGMutablePath()
-                camino.addRoundedRect(in: r, cornerWidth: 1.5, cornerHeight: 1.5)
+                camino.addRoundedRectSeguro(in: r, cornerWidth: 1.5, cornerHeight: 1.5)
                 c.addPath(camino)
                 let elegido = seleccion.contains(e.id)
                 c.setFillColor((elegido ? tema.acento : tema.rol(e.rol).trazo.color.withAlphaComponent(0.55)).cgColor)
@@ -140,7 +140,7 @@ final class Minimapa: NSView {
         c.setLineWidth(1.5)
         c.setFillColor(tema.acento.withAlphaComponent(0.10).cgColor)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: visible.insetBy(dx: 0.75, dy: 0.75), cornerWidth: 2, cornerHeight: 2)
+        camino.addRoundedRectSeguro(in: visible.insetBy(dx: 0.75, dy: 0.75), cornerWidth: 2, cornerHeight: 2)
         c.addPath(camino); c.fillPath()
         c.addPath(camino); c.strokePath()
     }

@@ -632,7 +632,7 @@ final class PaletaTinta: NSView {
         // ── LA MUESTRA ───────────────────────────────────────────────────
         let cajaM = NSRect(x: 0, y: 0, width: bounds.width, height: 44)
         let caminoM = CGMutablePath()
-        caminoM.addRoundedRect(in: cajaM, cornerWidth: 10, cornerHeight: 10)
+        caminoM.addRoundedRectSeguro(in: cajaM, cornerWidth: 10, cornerHeight: 10)
         c.addPath(caminoM)
         c.setFillColor(tema.lienzo.cgColor)
         c.fillPath()
@@ -692,7 +692,7 @@ final class PaletaTinta: NSView {
         let past = NSRect(x: cajaM.maxX - anchoEtq - 16, y: cajaM.minY + 5,
                           width: anchoEtq + 10, height: 15)
         let cp = CGMutablePath()
-        cp.addRoundedRect(in: past, cornerWidth: 5, cornerHeight: 5)
+        cp.addRoundedRectSeguro(in: past, cornerWidth: 5, cornerHeight: 5)
         c.addPath(cp)
         c.setFillColor(tema.rol("card").relleno.withAlphaComponent(0.9).cgColor)
         c.fillPath()
@@ -708,7 +708,7 @@ final class PaletaTinta: NSView {
                            width: lado, height: lado)
             celdas.append((r, tinta))
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: r, cornerWidth: 6, cornerHeight: 6)
+            camino.addRoundedRectSeguro(in: r, cornerWidth: 6, cornerHeight: 6)
             c.addPath(camino)
             c.setFillColor((tinta.flatMap { NSColor(hex: $0) } ?? tema.tinta).cgColor)
             c.fillPath()
@@ -718,7 +718,7 @@ final class PaletaTinta: NSView {
             // no se ve. El anillo separado se ve en las doce por igual.
             if elegida {
                 let anillo = CGMutablePath()
-                anillo.addRoundedRect(in: r.insetBy(dx: -3, dy: -3), cornerWidth: 8, cornerHeight: 8)
+                anillo.addRoundedRectSeguro(in: r.insetBy(dx: -3, dy: -3), cornerWidth: 8, cornerHeight: 8)
                 c.addPath(anillo)
                 c.setStrokeColor(tema.acento.cgColor); c.setLineWidth(2); c.strokePath()
             }
@@ -762,7 +762,7 @@ final class PaletaTinta: NSView {
             let elegido = abs(actual.grosor - gr) < 0.01
             if elegido {
                 let camino = CGMutablePath()
-                camino.addRoundedRect(in: r.insetBy(dx: 1.5, dy: 1), cornerWidth: 8, cornerHeight: 8)
+                camino.addRoundedRectSeguro(in: r.insetBy(dx: 1.5, dy: 1), cornerWidth: 8, cornerHeight: 8)
                 c.addPath(camino); c.setFillColor(tema.acento.cgColor); c.fillPath()
             }
             // Escalado, no a tamaño real: 26 px no caben en una celda de 30 y
@@ -798,7 +798,7 @@ final class PaletaTinta: NSView {
          */
         gotero = NSRect(x: bounds.width - 26, y: yR - 2, width: 24, height: 18)
         let gp = CGMutablePath()
-        gp.addRoundedRect(in: gotero, cornerWidth: 6, cornerHeight: 6)
+        gp.addRoundedRectSeguro(in: gotero, cornerWidth: 6, cornerHeight: 6)
         c.addPath(gp); c.setFillColor(tema.lienzo.cgColor); c.fillPath()
         c.addPath(gp); c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
         c.setLineWidth(1); c.strokePath()
@@ -814,13 +814,13 @@ final class PaletaTinta: NSView {
             let r = NSRect(x: CGFloat(i) * (lado + hueco), y: yR + 16, width: lado, height: lado)
             celdas.append((r, hx))
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: r, cornerWidth: 6, cornerHeight: 6)
+            camino.addRoundedRectSeguro(in: r, cornerWidth: 6, cornerHeight: 6)
             c.addPath(camino)
             c.setFillColor((NSColor(hex: hx) ?? tema.tinta).cgColor)
             c.fillPath()
             if actual.color?.caseInsensitiveCompare(hx) == .orderedSame {
                 let anillo = CGMutablePath()
-                anillo.addRoundedRect(in: r.insetBy(dx: -3, dy: -3), cornerWidth: 8, cornerHeight: 8)
+                anillo.addRoundedRectSeguro(in: r.insetBy(dx: -3, dy: -3), cornerWidth: 8, cornerHeight: 8)
                 c.addPath(anillo)
                 c.setStrokeColor(tema.acento.cgColor); c.setLineWidth(2); c.strokePath()
             }
@@ -943,7 +943,7 @@ final class PaletaGoma: NSView {
             let elegido = actual.grosor == g
             if elegido {
                 let camino = CGMutablePath()
-                camino.addRoundedRect(in: celda, cornerWidth: 9, cornerHeight: 9)
+                camino.addRoundedRectSeguro(in: celda, cornerWidth: 9, cornerHeight: 9)
                 c.addPath(camino); c.setFillColor(tema.acento.cgColor); c.fillPath()
             }
             // Escalado a la celda: del más fino al más gordo hay un factor 10, y

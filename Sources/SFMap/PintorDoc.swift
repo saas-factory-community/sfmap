@@ -102,7 +102,7 @@ extension Pintor {
         // ── la HOJA ─────────────────────────────────────────────────────────
         let hoja = CGRect(x: r.minX, y: y, width: r.width, height: max(40, r.maxY - y))
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: hoja, cornerWidth: 5, cornerHeight: 5)
+        camino.addRoundedRectSeguro(in: hoja, cornerWidth: 5, cornerHeight: 5)
         ctx.setShadow(offset: CGSize(width: 0, height: 3), blur: 12,
                       color: NSColor.black.withAlphaComponent(tema.nombre == "oscuro" ? 0.55 : 0.16).cgColor)
         ctx.addPath(camino)
@@ -122,7 +122,7 @@ extension Pintor {
         // ensucia el referente.
         let sello = CGRect(x: hoja.maxX - 40, y: hoja.minY + 9, width: 31, height: 15)
         let ps = CGMutablePath()
-        ps.addRoundedRect(in: sello, cornerWidth: 3, cornerHeight: 3)
+        ps.addRoundedRectSeguro(in: sello, cornerWidth: 3, cornerHeight: 3)
         ctx.addPath(ps)
         ctx.setFillColor(tema.acento.withAlphaComponent(0.14).cgColor)
         ctx.fillPath()
@@ -172,7 +172,7 @@ extension Pintor {
                 let alto = Double(n) * 5.2 + 8
                 ctx.setFillColor(tema.rol("sensor").relleno.cgColor)
                 let p = CGMutablePath()
-                p.addRoundedRect(in: CGRect(x: hoja.minX + pad, y: cy + 2, width: ancho, height: alto),
+                p.addRoundedRectSeguro(in: CGRect(x: hoja.minX + pad, y: cy + 2, width: ancho, height: alto),
                                  cornerWidth: 3, cornerHeight: 3)
                 ctx.addPath(p); ctx.fillPath()
                 ctx.setFillColor(tema.acento.withAlphaComponent(0.42).cgColor)

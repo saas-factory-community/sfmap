@@ -93,6 +93,14 @@ final class MecanismoTests: XCTestCase {
 
     /// Mover el dial cambia el dibujo. Es la prueba de que el mecanismo enacta
     /// y no sólo se pinta.
+    func testDialEnExtremosYRecorridoCortoNoProduceGeometriaInvalida() {
+        for valor in [0.0, 0.001, 0.01, 0.1, 0.5, 1.0] {
+            guard let contexto = ctxDe(400, 260, .claro) else { return XCTFail("sin contexto") }
+            Mecanismo.pintar(engranes(), contexto, .claro, valor: valor)
+            XCTAssertFalse(pixeles(contexto).isEmpty)
+        }
+    }
+
     func testMoverElDialCambiaElDibujo() {
         let tema = Tema.claro
         let e = engranes()

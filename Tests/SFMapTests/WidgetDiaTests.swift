@@ -873,7 +873,7 @@ final class EnlaceToleranteTests: XCTestCase {
         XCTAssertEqual(Enlace.rutaApp("sfcal?vista=monkMode"), ruta)
         XCTAssertEqual(Enlace.rutaApp("sfcal?loQueSea=42&otro=1"), ruta,
                         "un sufijo que esta versión no conoce no puede romper la apertura")
-        XCTAssertNotNil(Enlace.rutaApp("SFCal?vista=week"), "ni las mayúsculas")
+        XCTAssertEqual(Enlace.rutaApp("SFCal?vista=week"), ruta, "ni las mayúsculas")
     }
 
     /// Y la lista sigue cerrada: tolerar un sufijo no es tolerar cualquier app.

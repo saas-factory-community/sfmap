@@ -74,7 +74,7 @@ extension Pintor {
         ctx.saveGState()
         ctx.setAlpha(e.opacidad)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: e.caja, cornerWidth: 8, cornerHeight: 8)
+        camino.addRoundedRectSeguro(in: e.caja, cornerWidth: 8, cornerHeight: 8)
         ctx.addPath(camino)
         ctx.setFillColor(tema.rol("card").relleno.cgColor)
         ctx.fillPath()
@@ -125,7 +125,7 @@ extension Pintor {
         ctx.saveGState()
         ctx.setAlpha(e.opacidad)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: e.caja, cornerWidth: 8, cornerHeight: 8)
+        camino.addRoundedRectSeguro(in: e.caja, cornerWidth: 8, cornerHeight: 8)
         ctx.addPath(camino)
         ctx.setFillColor(tema.rol("sticky").relleno.cgColor)
         ctx.fillPath()
@@ -159,7 +159,7 @@ extension Pintor {
         ctx.saveGState()
         ctx.setAlpha(e.opacidad)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: e.caja, cornerWidth: 6, cornerHeight: 6)
+        camino.addRoundedRectSeguro(in: e.caja, cornerWidth: 6, cornerHeight: 6)
         // ⚡ De lejos (menos de `lodImagenPx` de ancho en pantalla) un bitmap se
         // reescala entero en cada cuadro para ocupar una mancha: se pinta la
         // mancha y ya. Al acercarse vuelve la imagen real.
@@ -244,7 +244,7 @@ extension Pintor {
         ctx.saveGState()
         ctx.setAlpha(e.opacidad)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: e.caja, cornerWidth: 10, cornerHeight: 10)
+        camino.addRoundedRectSeguro(in: e.caja, cornerWidth: 10, cornerHeight: 10)
         ctx.addPath(camino)
         ctx.setFillColor(tema.rol("card").relleno.cgColor)
         ctx.fillPath()
@@ -322,7 +322,7 @@ extension Pintor {
             let caja = CGRect(x: c.x - lado / 2, y: c.y - lado / 2, width: lado, height: lado)
             let camino = CGMutablePath()
             if texto { camino.addEllipse(in: caja) }
-            else { camino.addRoundedRect(in: caja, cornerWidth: 2 / z, cornerHeight: 2 / z) }
+            else { camino.addRoundedRectSeguro(in: caja, cornerWidth: 2 / z, cornerHeight: 2 / z) }
             ctx.addPath(camino); ctx.setFillColor(tema.rol("card").relleno.cgColor); ctx.fillPath()
             ctx.addPath(camino); ctx.setStrokeColor((texto ? tema.cuerpoTexto.withAlphaComponent(0.45) : tema.seleccion).cgColor); ctx.strokePath()
         }
@@ -417,7 +417,7 @@ extension Pintor {
         let r = e.cajaVisual.insetBy(dx: -6 / camara.zoom, dy: -6 / camara.zoom)
         let camino = CGMutablePath()
         let radio = 10 / camara.zoom
-        camino.addRoundedRect(in: r, cornerWidth: radio, cornerHeight: radio)
+        camino.addRoundedRectSeguro(in: r, cornerWidth: radio, cornerHeight: radio)
         ctx.addPath(camino)
         ctx.setFillColor(tema.acento.withAlphaComponent(0.10).cgColor)
         ctx.fillPath()

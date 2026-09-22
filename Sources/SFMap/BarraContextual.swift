@@ -73,13 +73,13 @@ final class Deslizador: NSView {
         let y = bounds.midY, alto = 4.0
         let riel = NSRect(x: 7, y: y - alto / 2, width: bounds.width - 14, height: alto)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: riel, cornerWidth: 2, cornerHeight: 2)
+        camino.addRoundedRectSeguro(in: riel, cornerWidth: 2, cornerHeight: 2)
         c.addPath(camino); c.setFillColor(tema.rol("card").trazo.color.cgColor); c.fillPath()
         // Clamp SIEMPRE: un valor fuera de rango (el radio 999 de un rol viejo)
         // pintaba la barra 15x más ancha que el riel — la "línea que se sale".
         let t = maximo > minimo ? max(0, min(1, (valor - minimo) / (maximo - minimo))) : 0
         let lleno = NSRect(x: riel.minX, y: riel.minY, width: riel.width * t, height: alto)
-        let c2 = CGMutablePath(); c2.addRoundedRect(in: lleno, cornerWidth: 2, cornerHeight: 2)
+        let c2 = CGMutablePath(); c2.addRoundedRectSeguro(in: lleno, cornerWidth: 2, cornerHeight: 2)
         c.addPath(c2); c.setFillColor(tema.acento.cgColor); c.fillPath()
         let cx = riel.minX + riel.width * t
         c.setFillColor(tema.rol("card").relleno.cgColor)
@@ -289,14 +289,14 @@ final class VistaPaleta: NSView {
      */
     private func pintarExacto(_ c: CGContext) {
         let campo = NSRect(x: 0, y: cajaExacto.minY, width: Self.UTIL - 34, height: 24)
-        let cp = CGMutablePath(); cp.addRoundedRect(in: campo, cornerWidth: 7, cornerHeight: 7)
+        let cp = CGMutablePath(); cp.addRoundedRectSeguro(in: campo, cornerWidth: 7, cornerHeight: 7)
         c.addPath(cp); c.setFillColor(tema.lienzo.cgColor); c.fillPath()
         c.addPath(cp); c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
         c.setLineWidth(1); c.strokePath()
         // El texto lo pinta el NSTextField que vive encima; aquí va solo su caja.
 
         let g = cajaGotero
-        let gp = CGMutablePath(); gp.addRoundedRect(in: g, cornerWidth: 7, cornerHeight: 7)
+        let gp = CGMutablePath(); gp.addRoundedRectSeguro(in: g, cornerWidth: 7, cornerHeight: 7)
         c.addPath(gp); c.setFillColor(tema.lienzo.cgColor); c.fillPath()
         c.addPath(gp); c.setStrokeColor(tema.rol("card").trazo.color.cgColor)
         c.setLineWidth(1); c.strokePath()
@@ -315,7 +315,7 @@ final class VistaPaleta: NSView {
     private func casilla(_ c: CGContext, _ r: NSRect, _ m: Muestra) {
         let camino = CGMutablePath()
         let radio: CGFloat = redondo ? 12 : 7
-        camino.addRoundedRect(in: r, cornerWidth: radio, cornerHeight: radio)
+        camino.addRoundedRectSeguro(in: r, cornerWidth: radio, cornerHeight: radio)
         c.addPath(camino)
         c.setFillColor((m.color.flatMap { NSColor(hex: $0) } ?? tema.rol("card").relleno).cgColor)
         c.fillPath()
@@ -1490,7 +1490,7 @@ final class BarraContextual: NSView {
         NSImage(size: NSSize(width: 20, height: 20), flipped: true) { [tema] r in
             guard let c = NSGraphicsContext.current?.cgContext else { return false }
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: r.insetBy(dx: 1, dy: 1), cornerWidth: 6, cornerHeight: 6)
+            camino.addRoundedRectSeguro(in: r.insetBy(dx: 1, dy: 1), cornerWidth: 6, cornerHeight: 6)
             c.addPath(camino); c.setFillColor((NSColor(hex: color) ?? .gray).cgColor); c.fillPath()
             c.addPath(camino)
             c.setStrokeColor((marcada ? tema.acento : tema.rol("card").trazo.color).cgColor)
@@ -1508,7 +1508,7 @@ final class BarraContextual: NSView {
         let img = NSImage(size: NSSize(width: 16, height: 16), flipped: true) { [tema] r in
             guard let c = NSGraphicsContext.current?.cgContext else { return false }
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: r.insetBy(dx: 1.5, dy: 1.5), cornerWidth: 4, cornerHeight: 4)
+            camino.addRoundedRectSeguro(in: r.insetBy(dx: 1.5, dy: 1.5), cornerWidth: 4, cornerHeight: 4)
             guard let rol else {
                 c.addPath(camino)
                 c.setStrokeColor(tema.pieTexto.cgColor); c.setLineWidth(2)
@@ -1537,7 +1537,7 @@ final class BarraContextual: NSView {
             guard let c = NSGraphicsContext.current?.cgContext else { return false }
             let tin = tema.tintes[t] ?? tema.tintes["neutro"]!
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: r.insetBy(dx: 1, dy: 1), cornerWidth: 5, cornerHeight: 5)
+            camino.addRoundedRectSeguro(in: r.insetBy(dx: 1, dy: 1), cornerWidth: 5, cornerHeight: 5)
             c.addPath(camino); c.setFillColor(tin.relleno.cgColor); c.fillPath()
             c.addPath(camino); c.setStrokeColor(tin.trazo.cgColor); c.setLineWidth(2); c.strokePath()
             return true

@@ -328,14 +328,14 @@ enum Mecanismo {
                       x: zona.minX, y: y + alto / 2 - 11, ancho: 196, alinea: "right")
 
             let fondo = CGMutablePath()
-            fondo.addRoundedRect(in: pista, cornerWidth: 8, cornerHeight: 8)
+            fondo.addRoundedRectSeguro(in: pista, cornerWidth: 8, cornerHeight: 8)
             ctx.addPath(fondo)
             ctx.setFillColor(tema.rol("sticky").relleno.cgColor); ctx.fillPath()
 
             let lleno = CGRect(x: pista.minX, y: pista.minY,
                                width: max(6, pista.width * frac), height: pista.height)
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: lleno, cornerWidth: 8, cornerHeight: 8)
+            camino.addRoundedRectSeguro(in: lleno, cornerWidth: 8, cornerHeight: 8)
             ctx.saveGState(); ctx.addPath(fondo); ctx.clip()
             ctx.addPath(camino)
             ctx.setFillColor((pieza.radio >= 0 ? medio : fuerte).withAlphaComponent(0.55).cgColor)
@@ -491,7 +491,7 @@ enum Mecanismo {
             caja.origin.x = min(max(caja.minX, e.x + 8), e.x + e.ancho - ancho - 8)
             if caja.minY < e.y { caja.origin.y = c.y + 44 }
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: caja, cornerWidth: 10, cornerHeight: 10)
+            camino.addRoundedRectSeguro(in: caja, cornerWidth: 10, cornerHeight: 10)
             ctx.setShadow(offset: CGSize(width: 0, height: 3), blur: 10,
                           color: NSColor.black.withAlphaComponent(0.22).cgColor)
             ctx.addPath(camino); ctx.setFillColor(tema.lienzo.cgColor); ctx.fillPath()
@@ -585,7 +585,7 @@ enum Mecanismo {
         let r = riel(e)
         ctx.saveGState()
         let pista = CGMutablePath()
-        pista.addRoundedRect(in: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2)
+        pista.addRoundedRectSeguro(in: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2)
         ctx.addPath(pista)
         ctx.setFillColor(tema.rol("sticky").relleno.cgColor); ctx.fillPath()
         ctx.addPath(pista)
@@ -595,7 +595,7 @@ enum Mecanismo {
         // Lo recorrido
         let lleno = CGRect(x: r.minX, y: r.minY, width: max(0, r.width * v), height: r.height)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: lleno, cornerWidth: r.height / 2, cornerHeight: r.height / 2)
+        camino.addRoundedRectSeguro(in: lleno, cornerWidth: r.height / 2, cornerHeight: r.height / 2)
         ctx.saveGState(); ctx.addPath(pista); ctx.clip()
         ctx.addPath(camino); ctx.setFillColor(medio.withAlphaComponent(0.45).cgColor)
         ctx.fillPath(); ctx.restoreGState()

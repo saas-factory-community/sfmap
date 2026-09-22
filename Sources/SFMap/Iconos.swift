@@ -63,14 +63,14 @@ extension Icono {
      */
     static let lienzo = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 3.4, y: 4.8, width: 17.2, height: 14.4),
+        p.addRoundedRectSeguro(in: CGRect(x: 3.4, y: 4.8, width: 17.2, height: 14.4),
                          cornerWidth: 2.6, cornerHeight: 2.6)
         c.addPath(p); c.strokePath()
         c.setLineWidth(1.35)
         for r in [CGRect(x: 6.3, y: 7.6, width: 5.2, height: 3.8),
                   CGRect(x: 12.6, y: 12.6, width: 5.2, height: 3.8)] {
             let q = CGMutablePath()
-            q.addRoundedRect(in: r, cornerWidth: 1.1, cornerHeight: 1.1)
+            q.addRoundedRectSeguro(in: r, cornerWidth: 1.1, cornerHeight: 1.1)
             c.addPath(q); c.strokePath()
         }
         c.move(to: CGPoint(x: 8.9, y: 11.4))
@@ -96,12 +96,12 @@ extension Icono {
     /// crea: aquí, el lienzo con su nodo y su codo, encogido.
     static let lienzoMas = conMas { c in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 2.6, y: 4.2, width: 14.2, height: 12.2),
+        p.addRoundedRectSeguro(in: CGRect(x: 2.6, y: 4.2, width: 14.2, height: 12.2),
                          cornerWidth: 2.4, cornerHeight: 2.4)
         c.addPath(p); c.strokePath()
         c.setLineWidth(1.3)
         let q = CGMutablePath()
-        q.addRoundedRect(in: CGRect(x: 5.0, y: 6.6, width: 4.6, height: 3.4),
+        q.addRoundedRectSeguro(in: CGRect(x: 5.0, y: 6.6, width: 4.6, height: 3.4),
                          cornerWidth: 1, cornerHeight: 1)
         c.addPath(q); c.strokePath()
         c.move(to: CGPoint(x: 7.3, y: 10.0))
@@ -146,18 +146,18 @@ extension Icono {
     /// llenos: palma, tres dedos y pulgar.
     static let mano = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 6.6, y: 11, width: 11.4, height: 9.4), cornerWidth: 4.2, cornerHeight: 4.2)
+        p.addRoundedRectSeguro(in: CGRect(x: 6.6, y: 11, width: 11.4, height: 9.4), cornerWidth: 4.2, cornerHeight: 4.2)
         for (x, y, h) in [(8.4, 6.2, 7.0), (11.2, 4.6, 8.6), (14.0, 6.2, 7.0)] {
-            p.addRoundedRect(in: CGRect(x: x, y: y, width: 2.4, height: h), cornerWidth: 1.2, cornerHeight: 1.2)
+            p.addRoundedRectSeguro(in: CGRect(x: x, y: y, width: 2.4, height: h), cornerWidth: 1.2, cornerHeight: 1.2)
         }
-        p.addRoundedRect(in: CGRect(x: 4.2, y: 12.4, width: 2.4, height: 5.4), cornerWidth: 1.2, cornerHeight: 1.2)
+        p.addRoundedRectSeguro(in: CGRect(x: 4.2, y: 12.4, width: 2.4, height: 5.4), cornerWidth: 1.2, cornerHeight: 1.2)
         c.addPath(p); c.fillPath()
     }
     /// La nota con su pestaña MORDIDA (even-odd): la muesca es parte de la
     /// silueta, como en la matriz.
     static let nota = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 4, y: 4, width: 16, height: 16), cornerWidth: 3, cornerHeight: 3)
+        p.addRoundedRectSeguro(in: CGRect(x: 4, y: 4, width: 16, height: 16), cornerWidth: 3, cornerHeight: 3)
         p.addRect(CGRect(x: 13.5, y: 13.5, width: 6.5, height: 6.5))
         c.addPath(p)
         c.fillPath(using: .evenOdd)
@@ -176,7 +176,7 @@ extension Icono {
     }
     static let cuadrado = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 4.5, y: 5.5, width: 15, height: 13), cornerWidth: 3, cornerHeight: 3)
+        p.addRoundedRectSeguro(in: CGRect(x: 4.5, y: 5.5, width: 15, height: 13), cornerWidth: 3, cornerHeight: 3)
         c.addPath(p); c.fillPath()
     }
     static let circulo = dibujar { c, _ in
@@ -195,7 +195,7 @@ extension Icono {
     }
     static let pildora = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 3.5, y: 7.5, width: 17, height: 9), cornerWidth: 4.5, cornerHeight: 4.5)
+        p.addRoundedRectSeguro(in: CGRect(x: 3.5, y: 7.5, width: 17, height: 9), cornerWidth: 4.5, cornerHeight: 4.5)
         c.addPath(p); c.fillPath()
     }
     static let hexagono = dibujar { c, _ in
@@ -254,7 +254,7 @@ extension Icono {
     /// RESTAN de la pieza (even-odd): dos calles de 2 px.
     static let tabla = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 3.6, y: 4.8, width: 16.8, height: 14.4), cornerWidth: 2.4, cornerHeight: 2.4)
+        p.addRoundedRectSeguro(in: CGRect(x: 3.6, y: 4.8, width: 16.8, height: 14.4), cornerWidth: 2.4, cornerHeight: 2.4)
         p.addRect(CGRect(x: 3.6, y: 9.6, width: 16.8, height: 2))
         p.addRect(CGRect(x: 11.1, y: 11.6, width: 2, height: 7.6))
         c.addPath(p)
@@ -263,7 +263,7 @@ extension Icono {
     static let imagen = dibujar { c, _ in
         c.setLineWidth(2.1)
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 3.6, y: 5.4, width: 16.8, height: 13.2), cornerWidth: 2.4, cornerHeight: 2.4)
+        p.addRoundedRectSeguro(in: CGRect(x: 3.6, y: 5.4, width: 16.8, height: 13.2), cornerWidth: 2.4, cornerHeight: 2.4)
         c.addPath(p); c.strokePath()
         c.addEllipse(in: CGRect(x: 7, y: 8.4, width: 3, height: 3)); c.strokePath()
         poli(c, [(4.6, 17.4), (10, 12.4), (13.4, 15.4), (16, 13), (19.4, 16.4)], cerrar: false)
@@ -271,7 +271,7 @@ extension Icono {
     static let embed = dibujar { c, _ in
         c.setLineWidth(2.1)
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 3.6, y: 5, width: 16.8, height: 14), cornerWidth: 2.4, cornerHeight: 2.4)
+        p.addRoundedRectSeguro(in: CGRect(x: 3.6, y: 5, width: 16.8, height: 14), cornerWidth: 2.4, cornerHeight: 2.4)
         c.addPath(p); c.strokePath()
         linea(c, (3.6, 9.2), (20.4, 9.2))
         c.fillEllipse(in: CGRect(x: 5.8, y: 6.4, width: 1.6, height: 1.6))
@@ -338,12 +338,12 @@ extension Icono {
     }
     static let contornoIcono = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 4.5, y: 6, width: 15, height: 12), cornerWidth: 2.6, cornerHeight: 2.6)
+        p.addRoundedRectSeguro(in: CGRect(x: 4.5, y: 6, width: 15, height: 12), cornerWidth: 2.6, cornerHeight: 2.6)
         c.setLineWidth(2.6); c.addPath(p); c.strokePath()
     }
     static let rellenoIcono = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 4.5, y: 6, width: 15, height: 12), cornerWidth: 2.6, cornerHeight: 2.6)
+        p.addRoundedRectSeguro(in: CGRect(x: 4.5, y: 6, width: 15, height: 12), cornerWidth: 2.6, cornerHeight: 2.6)
         c.addPath(p); c.fillPath()
     }
     /// EL ENLACE: dos eslabones entrelazados, no dos arcos sueltos.
@@ -357,7 +357,7 @@ extension Icono {
             c.translateBy(x: 12 + dx, y: 12 + dy)
             c.rotate(by: -.pi / 4)
             let p = CGMutablePath()
-            p.addRoundedRect(in: CGRect(x: -5.6, y: -2.9, width: 11.2, height: 5.8),
+            p.addRoundedRectSeguro(in: CGRect(x: -5.6, y: -2.9, width: 11.2, height: 5.8),
                              cornerWidth: 2.9, cornerHeight: 2.9)
             c.addPath(p); c.strokePath()
             c.restoreGState()
@@ -365,14 +365,14 @@ extension Icono {
     }
     static let candado = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 5.4, y: 10.6, width: 13.2, height: 9.4), cornerWidth: 2.2, cornerHeight: 2.2)
+        p.addRoundedRectSeguro(in: CGRect(x: 5.4, y: 10.6, width: 13.2, height: 9.4), cornerWidth: 2.2, cornerHeight: 2.2)
         c.addPath(p); c.strokePath()
         c.addArc(center: CGPoint(x: 12, y: 10.4), radius: 3.8, startAngle: .pi, endAngle: 0, clockwise: false)
         c.strokePath()
     }
     static let candadoAbierto = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 5.4, y: 10.6, width: 13.2, height: 9.4), cornerWidth: 2.2, cornerHeight: 2.2)
+        p.addRoundedRectSeguro(in: CGRect(x: 5.4, y: 10.6, width: 13.2, height: 9.4), cornerWidth: 2.2, cornerHeight: 2.2)
         c.addPath(p); c.strokePath()
         c.addArc(center: CGPoint(x: 16.6, y: 10.4), radius: 3.8, startAngle: .pi, endAngle: .pi * 1.75, clockwise: false)
         c.strokePath()
@@ -400,7 +400,7 @@ extension Icono {
     }
     static let duplicar = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 8, y: 8, width: 12, height: 12), cornerWidth: 2.2, cornerHeight: 2.2)
+        p.addRoundedRectSeguro(in: CGRect(x: 8, y: 8, width: 12, height: 12), cornerWidth: 2.2, cornerHeight: 2.2)
         c.addPath(p); c.strokePath()
         poli(c, [(15.6, 4.6), (4.6, 4.6), (4.6, 15.6)], cerrar: false)
     }
@@ -410,7 +410,7 @@ extension Icono {
     static let agrupar = dibujar { c, _ in
         for r in [CGRect(x: 7, y: 7, width: 7, height: 7), CGRect(x: 12, y: 12, width: 7, height: 7)] {
             let p = CGMutablePath()
-            p.addRoundedRect(in: r, cornerWidth: 1.6, cornerHeight: 1.6)
+            p.addRoundedRectSeguro(in: r, cornerWidth: 1.6, cornerHeight: 1.6)
             c.addPath(p); c.strokePath()
         }
         c.saveGState()
@@ -421,7 +421,7 @@ extension Icono {
     static let desagrupar = dibujar { c, _ in
         for r in [CGRect(x: 4.4, y: 4.4, width: 8, height: 8), CGRect(x: 13.6, y: 13.6, width: 8, height: 8)] {
             let p = CGMutablePath()
-            p.addRoundedRect(in: r, cornerWidth: 1.8, cornerHeight: 1.8)
+            p.addRoundedRectSeguro(in: r, cornerWidth: 1.8, cornerHeight: 1.8)
             c.addPath(p); c.strokePath()
         }
     }
@@ -430,18 +430,18 @@ extension Icono {
     /// iconos no se leían como opuestos del mismo gesto.
     static let alFrente = dibujar { c, _ in
         let atras = CGMutablePath()
-        atras.addRoundedRect(in: CGRect(x: 4.4, y: 4.4, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
+        atras.addRoundedRectSeguro(in: CGRect(x: 4.4, y: 4.4, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
         c.addPath(atras); c.strokePath()
         let frente = CGMutablePath()
-        frente.addRoundedRect(in: CGRect(x: 8.6, y: 8.6, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
+        frente.addRoundedRectSeguro(in: CGRect(x: 8.6, y: 8.6, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
         c.addPath(frente); c.setFillColor(NSColor.black.cgColor); c.fillPath()
     }
     static let alFondo = dibujar { c, _ in
         let atras = CGMutablePath()
-        atras.addRoundedRect(in: CGRect(x: 4.4, y: 4.4, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
+        atras.addRoundedRectSeguro(in: CGRect(x: 4.4, y: 4.4, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
         c.addPath(atras); c.setFillColor(NSColor.black.cgColor); c.fillPath()
         let frente = CGMutablePath()
-        frente.addRoundedRect(in: CGRect(x: 8.6, y: 8.6, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
+        frente.addRoundedRectSeguro(in: CGRect(x: 8.6, y: 8.6, width: 11, height: 11), cornerWidth: 2, cornerHeight: 2)
         c.addPath(frente); c.setStrokeColor(NSColor.white.cgColor); c.setLineWidth(3.2); c.strokePath()
         c.addPath(frente); c.setStrokeColor(NSColor.black.cgColor); c.setLineWidth(1.6); c.strokePath()
     }
@@ -497,7 +497,7 @@ extension Icono {
     }
     static let fondoLiso = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 4, y: 4, width: 16, height: 16), cornerWidth: 2.4, cornerHeight: 2.4)
+        p.addRoundedRectSeguro(in: CGRect(x: 4, y: 4, width: 16, height: 16), cornerWidth: 2.4, cornerHeight: 2.4)
         c.addPath(p); c.strokePath()
     }
     static let fondoPuntos = dibujar { c, _ in
@@ -507,7 +507,7 @@ extension Icono {
     }
     static let fondoCuadricula = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 4, y: 4, width: 16, height: 16), cornerWidth: 2.4, cornerHeight: 2.4)
+        p.addRoundedRectSeguro(in: CGRect(x: 4, y: 4, width: 16, height: 16), cornerWidth: 2.4, cornerHeight: 2.4)
         c.addPath(p); c.strokePath()
         linea(c, (4, 12), (20, 12)); linea(c, (12, 4), (12, 20))
     }
@@ -580,13 +580,13 @@ extension Icono {
             let h = max(2, min(9, g * 0.8))
             let r = CGRect(x: 3.4, y: 12 - h / 2, width: 17.2, height: h)
             let p = CGMutablePath()
-            p.addRoundedRect(in: r, cornerWidth: h / 2, cornerHeight: h / 2)
+            p.addRoundedRectSeguro(in: r, cornerWidth: h / 2, cornerHeight: h / 2)
             c.addPath(p); c.fillPath()
         }
     }
     static let figuras = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 3.6, y: 3.6, width: 9.6, height: 9.6), cornerWidth: 1.8, cornerHeight: 1.8)
+        p.addRoundedRectSeguro(in: CGRect(x: 3.6, y: 3.6, width: 9.6, height: 9.6), cornerWidth: 1.8, cornerHeight: 1.8)
         c.addPath(p); c.strokePath()
         c.addEllipse(in: CGRect(x: 11.4, y: 11.4, width: 9.2, height: 9.2)); c.strokePath()
     }
@@ -633,7 +633,7 @@ extension Icono {
     /// apps con barra lateral — un rectángulo con su columna izquierda marcada.
     static let panel = dibujar { c, _ in
         let p = CGMutablePath()
-        p.addRoundedRect(in: CGRect(x: 3.4, y: 5.4, width: 17.2, height: 13.2),
+        p.addRoundedRectSeguro(in: CGRect(x: 3.4, y: 5.4, width: 17.2, height: 13.2),
                          cornerWidth: 2.4, cornerHeight: 2.4)
         c.addPath(p); c.strokePath()
         linea(c, (10.2, 5.4), (10.2, 18.6))

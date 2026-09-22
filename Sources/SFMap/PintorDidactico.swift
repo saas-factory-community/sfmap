@@ -286,7 +286,7 @@ extension Pintor {
 
         // El vidrio.
         let vidrio = CGMutablePath()
-        vidrio.addRoundedRect(in: tubo, cornerWidth: anchoTubo / 2, cornerHeight: anchoTubo / 2)
+        vidrio.addRoundedRectSeguro(in: tubo, cornerWidth: anchoTubo / 2, cornerHeight: anchoTubo / 2)
         vidrio.addEllipse(in: bulbo)
         ctx.addPath(vidrio); ctx.setFillColor(c.tenue.cgColor); ctx.fillPath()
         ctx.addPath(vidrio); ctx.setStrokeColor(c.fuerte.cgColor); ctx.setLineWidth(2.5)
@@ -304,7 +304,7 @@ extension Pintor {
             let col = CGRect(x: tubo.minX + 4, y: tubo.maxY - hCol, width: tubo.width - 8, height: hCol)
             if hCol > 2 {
                 let pc = CGMutablePath()
-                pc.addRoundedRect(in: col, cornerWidth: col.width / 2, cornerHeight: col.width / 2)
+                pc.addRoundedRectSeguro(in: col, cornerWidth: col.width / 2, cornerHeight: col.width / 2)
                 ctx.addPath(pc); ctx.setFillColor(c.fuerte.cgColor); ctx.fillPath()
             }
             let et = "\(Int(pct.rounded()))%"
@@ -360,7 +360,7 @@ extension Pintor {
 
         // El MARCO grueso es lo que convierte doce celdas en un inventario.
         let marco = CGMutablePath()
-        marco.addRoundedRect(in: r, cornerWidth: 8, cornerHeight: 8)
+        marco.addRoundedRectSeguro(in: r, cornerWidth: 8, cornerHeight: 8)
         ctx.addPath(marco); ctx.setFillColor(c.fuerte.cgColor); ctx.fillPath()
 
         let pad = 9.0
@@ -372,7 +372,7 @@ extension Pintor {
             let cy = interior.minY + Double(i / cols) * (hCel + pad)
             let caja = CGRect(x: cx, y: cy, width: wCel, height: hCel)
             let p = CGMutablePath()
-            p.addRoundedRect(in: caja, cornerWidth: 4, cornerHeight: 4)
+            p.addRoundedRectSeguro(in: caja, cornerWidth: 4, cornerHeight: 4)
             ctx.addPath(p); ctx.setFillColor(tema.rol("card").relleno.cgColor); ctx.fillPath()
             dTextoCentrado(texto, en: caja.insetBy(dx: 6, dy: 4),
                            tam: e.crudo["parrilla"]?["tam"]?.num ?? 15, peso: 700,

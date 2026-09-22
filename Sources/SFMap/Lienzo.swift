@@ -673,7 +673,7 @@ final class Lienzo: NSView {
         ctx.saveGState()
         ctx.setAlpha(a.alfa)
         let camino = CGMutablePath()
-        camino.addRoundedRect(in: caja, cornerWidth: alto / 2, cornerHeight: alto / 2)
+        camino.addRoundedRectSeguro(in: caja, cornerWidth: alto / 2, cornerHeight: alto / 2)
         ctx.addPath(camino)
         ctx.setFillColor(tema.rol("card").relleno.withAlphaComponent(0.96).cgColor)
         ctx.fillPath()

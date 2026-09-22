@@ -10,6 +10,7 @@
 - Mejoras de selección, edición de texto, colores, conectores, recorte, zoom y documentos HTML.
 - Navegación a elementos y detalles de sistemas; mejoras de legibilidad al alejar el lienzo.
 - Conservación de campos desconocidos al guardar y detección de conflictos de versión.
+- Compatibilidad con Swift 6.1 y radios de dibujo seguros en macOS 15, incluso en controles con recorrido cero.
 - Distribución pública independiente de rutas, archivos y cuentas del autor.
 - Instrucciones de instalación/importación y empaquetado sin instalar sobre la aplicación del desarrollador.
 

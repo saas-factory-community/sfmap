@@ -242,10 +242,10 @@ struct Pintor {
             p.addLine(to: CGPoint(x: r.minX, y: r.maxY - cuerpo)); p.closeSubpath()
         case "pill":
             let rr = min(r.width, r.height) / 2
-            p.addRoundedRect(in: r, cornerWidth: rr, cornerHeight: rr)
+            p.addRoundedRectSeguro(in: r, cornerWidth: rr, cornerHeight: rr)
         default:
             let rr = min(radio, r.width / 2, r.height / 2)
-            p.addRoundedRect(in: r, cornerWidth: rr, cornerHeight: rr)
+            p.addRoundedRectSeguro(in: r, cornerWidth: rr, cornerHeight: rr)
         }
         return p
     }
@@ -383,7 +383,7 @@ struct Pintor {
         if p.kind == "chip" {
             ctx.setFillColor(tema.rol("sticky").relleno.cgColor)
             let camino = CGMutablePath()
-            camino.addRoundedRect(in: CGRect(x: e.x + p.x, y: e.y + p.y, width: p.ancho, height: p.alto),
+            camino.addRoundedRectSeguro(in: CGRect(x: e.x + p.x, y: e.y + p.y, width: p.ancho, height: p.alto),
                                   cornerWidth: 5, cornerHeight: 5)
             ctx.addPath(camino); ctx.fillPath()
         }
@@ -552,7 +552,7 @@ struct Pintor {
         ctx.setAlpha(e.opacidad)
         let camino = CGMutablePath()
         let radio = e.radioEsquina ?? tema.rol("tray").radio
-        camino.addRoundedRect(in: e.caja, cornerWidth: radio, cornerHeight: radio)
+        camino.addRoundedRectSeguro(in: e.caja, cornerWidth: radio, cornerHeight: radio)
         ctx.addPath(camino); ctx.setFillColor(relleno.cgColor); ctx.fillPath()
         let g = e.grosorLinea ?? 1.5
         if g > 0 {
@@ -616,7 +616,7 @@ struct Pintor {
             ctx.setFillColor(tin.trazo.cgColor)
             let cart = CGMutablePath()
             let altoCart = tam * 1.45
-            cart.addRoundedRect(in: CGRect(x: xCart, y: e.y - altoCart - 4, width: anchoCart, height: altoCart),
+            cart.addRoundedRectSeguro(in: CGRect(x: xCart, y: e.y - altoCart - 4, width: anchoCart, height: altoCart),
                                 cornerWidth: 5, cornerHeight: 5)
             ctx.addPath(cart); ctx.fillPath()
             ctx.saveGState()
