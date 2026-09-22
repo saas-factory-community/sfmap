@@ -619,7 +619,7 @@ enum Mecanismo {
             let margen = min(40.0, e.ancho * 0.08)
             p.renglon(texto, est, tema.pieTexto,
                       x: e.x + margen, y: r.midY - 9,
-                      ancho: r.minX - (e.x + margen) - 14, alinea: "right")
+                      ancho: Double(r.minX) - (e.x + margen) - 14, alinea: "right")
         }
         ctx.restoreGState()
     }

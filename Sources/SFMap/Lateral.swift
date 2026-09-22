@@ -1071,7 +1071,7 @@ final class Lateral: NSView {
         v.addSubview(t)
         _ = cuenta
         for (dy, col) in [(27.0, tema.bisel.borde), (26.0, tema.filoSurco)] {
-            let linea = NSView(frame: NSRect(x: 8, y: dy, width: v.frame.width - 16, height: 1))
+            let linea = NSView(frame: NSRect(x: 8, y: dy, width: Double(v.frame.width) - 16, height: 1))
             linea.wantsLayer = true
             linea.layer?.backgroundColor = col.cgColor
             v.addSubview(linea)

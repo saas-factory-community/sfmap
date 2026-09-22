@@ -478,8 +478,8 @@ final class Documento {
             porRango[r] = lista.sorted { a, b in
                 let va = vecinos(a, aristas).compactMap { posY[$0] }
                 let vb = vecinos(b, aristas).compactMap { posY[$0] }
-                let ba = va.isEmpty ? (posY[a] ?? 0) : va.reduce(0, +) / Double(va.count)
-                let bb = vb.isEmpty ? (posY[b] ?? 0) : vb.reduce(0, +) / Double(vb.count)
+                let ba: CGFloat = va.isEmpty ? (posY[a] ?? 0) : va.reduce(0, +) / CGFloat(va.count)
+                let bb: CGFloat = vb.isEmpty ? (posY[b] ?? 0) : vb.reduce(0, +) / CGFloat(vb.count)
                 return ba < bb
             }
         }

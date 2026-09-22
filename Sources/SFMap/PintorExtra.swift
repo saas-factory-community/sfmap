@@ -495,7 +495,7 @@ extension Pintor {
         ctx.strokePath()
         ctx.setLineDash(phase: 0, lengths: [])
         let ang = atan2(hasta.y - desde.y, hasta.x - desde.x)
-        let l = 10 / camara.zoom, w = 5.5 / camara.zoom
+        let l: CGFloat = 10 / CGFloat(camara.zoom), w: CGFloat = 5.5 / CGFloat(camara.zoom)
         ctx.setFillColor(tema.acento.cgColor)
         ctx.move(to: hasta)
         ctx.addLine(to: CGPoint(x: hasta.x - cos(ang) * l - sin(ang) * w, y: hasta.y - sin(ang) * l + cos(ang) * w))

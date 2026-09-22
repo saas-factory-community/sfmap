@@ -489,7 +489,7 @@ struct Pintor {
 
     private func punta(_ de: CGPoint, _ a: CGPoint, _ col: NSColor, _ tipo: String, escala: Double = 1) {
         let ang = atan2(a.y - de.y, a.x - de.x)
-        let l = 11.0 * escala, w = 6.0 * escala
+        let l: CGFloat = 11 * CGFloat(escala), w: CGFloat = 6 * CGFloat(escala)
         ctx.setFillColor(col.cgColor)
         ctx.setStrokeColor(col.cgColor)
         switch tipo {

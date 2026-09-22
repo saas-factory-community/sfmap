@@ -99,7 +99,7 @@ extension Pintor {
         // número".
         let hayDato = l.valor != nil
         let cifra = l.valor ?? "sin dato"
-        let tamCifra = tamanoQueCabe(cifra, ancho: r.width - pad * 2 - (l.delta != nil ? 54 : 0),
+        let tamCifra = tamanoQueCabe(cifra, ancho: Double(r.width) - pad * 2 - (l.delta != nil ? 54 : 0),
                                      desde: 27, hasta: 15, peso: 700, mono: true)
         let yCifra = r.minY + pad + 16
         pintarTexto(cifra, en: CGPoint(x: r.minX + pad, y: yCifra),

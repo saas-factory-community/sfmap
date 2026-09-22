@@ -846,7 +846,7 @@ extension Pintor {
             let vivo = b.desde <= m && b.hasta > m
             let pasado = b.hasta <= m
             if vivo {
-                wCaja(CGRect(x: r.minX + pad - 6, y: fy - 2, width: r.width - pad * 2 + 12, height: hFila),
+                wCaja(CGRect(x: r.minX + pad - 6, y: fy - 2, width: Double(r.width) - pad * 2 + 12, height: hFila),
                       radio: 6, relleno: tema.acento.withAlphaComponent(tema.nombre == "oscuro" ? 0.16 : 0.10))
                 wCaja(CGRect(x: r.minX + pad - 6, y: fy - 2, width: 4, height: hFila), radio: 2,
                       relleno: tema.acento)

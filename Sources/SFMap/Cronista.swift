@@ -62,8 +62,8 @@ struct EstadoDia {
             let mr = (mrr.valor ?? []).map { "\($0.dia)|\($0.mrr)" }
             let fi = "f:" + filtro.frentes.sorted().joined(separator: ",")
                    + "|p:" + filtro.prioridades.sorted().map(String.init).joined(separator: ",")
-            return (ev + ["·"] + ta + ["·"] + ha + ["·"] + mr + ["·", fi, "·"] + fallos)
-                .joined(separator: ";")
+            let partes: [[String]] = [ev, ["·"], ta, ["·"], ha, ["·"], mr, ["·", fi, "·"], fallos]
+            return partes.flatMap { $0 }.joined(separator: ";")
     }
 }
 

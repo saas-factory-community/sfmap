@@ -621,7 +621,7 @@ extension Icono {
     /// Una punta de flecha RELLENA. A 18 px una punta de tres líneas se lee como
     /// un garabato; rellena se lee como flecha.
     private static func cabeza(_ c: CGContext, desde a: CGPoint, hasta b: CGPoint,
-                               largo l: Double = 6.2, ancho w: Double = 3.4) {
+                               largo l: CGFloat = 6.2, ancho w: CGFloat = 3.4) {
         let ang = atan2(b.y - a.y, b.x - a.x)
         c.move(to: b)
         c.addLine(to: CGPoint(x: b.x - cos(ang) * l - sin(ang) * w, y: b.y - sin(ang) * l + cos(ang) * w))
