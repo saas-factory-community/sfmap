@@ -2,7 +2,7 @@
 
 ![Vista previa](vista-previa.png)
 
-**[Descarga Tu-negocio.sfmap](https://github.com/saas-factory-community/sfmap/releases/download/v0.2.0/Tu-negocio.sfmap)** y ábrelo desde sfmap → engrane → **Importar .sfmap…**.
+**[Descarga Tu-negocio.sfmap](https://github.com/saas-factory-community/sfmap/releases/download/v0.3.0/Tu-negocio.sfmap)** y ábrelo desde sfmap → engrane → **Importar .sfmap…**.
 
 Es una plantilla editable, no una captura. Sus 200 elementos y las imágenes incluidas funcionan sin cuentas ni archivos del autor.
 

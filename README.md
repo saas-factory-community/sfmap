@@ -2,13 +2,15 @@
 
 Un lienzo nativo para macOS: piensa, dibuja y organiza tu negocio con texto, imágenes, conectores y zoom. Tus mapas se guardan en tu Mac; no necesitas una cuenta ni configurar un servidor.
 
-![Plantilla editable de negocio](templates/tu-negocio/vista-previa.png)
+**sfmap · incluido en Arbrain.** Trae el **Mapa de Claridad**, el entregable de las dos primeras semanas del programa.
+
+![Mapa de Claridad · Arbrain](templates/mapa-de-claridad/vista-previa.png)
 
 ## Empieza aquí
 
-1. **[Descarga sfmap para Mac con Apple Silicon](https://github.com/saas-factory-community/sfmap/releases/tag/v0.2.0)**. Requiere macOS 15 o posterior.
+1. **[Descarga sfmap 0.3.0 para Mac con Apple Silicon](https://github.com/saas-factory-community/sfmap/releases/tag/v0.3.0)** (`sfmap-0.3.0-macOS-arm64.zip`). Requiere macOS 15 o posterior.
 2. Descomprime el paquete y arrastra `sfmap.app` a **Aplicaciones**.
-3. Abre la app. En el engrane, elige **Importar .sfmap…** y selecciona `Tu-negocio.sfmap`, incluido en la descarga.
+3. Abre la app (la primera vez, macOS pide **Abrir de todos modos**: la [guía](docs/instalacion.md) lo explica paso a paso). En el engrane, elige **Importar .sfmap…** y selecciona `Plantillas/Mapa-de-Claridad.sfmap`.
 4. Acércate con **⌘ + rueda**, edita un texto con **doble clic** y haz tuyo el mapa.
 
 **Versión de evaluación:** el binario tiene firma local, pero todavía no tiene Developer ID ni notarización de Apple. macOS puede mostrar una advertencia o bloquear la primera apertura. Consulta la [guía de instalación](docs/instalacion.md), que también incluye la opción de compilar desde el código.
@@ -22,11 +24,17 @@ Un lienzo nativo para macOS: piensa, dibuja y organiza tu negocio con texto, im�
 - **Navegación por zoom** y enlaces entre elementos. Barra inferior compacta con estado indicado por color.
 - **HTML y documentos locales** para usos avanzados dentro del editor. Los elementos HTML y los widgets conectados aún no se exportan al formato portátil.
 
+### Mapa de Claridad · Arbrain
+
+La [plantilla del programa](templates/mapa-de-claridad): a quién ayudas, tu promesa, tu escalera de oferta, tu vehículo, tu red caliente, tu oferta en una página y tus 90 días. Trae un ejemplo ficticio (Ana, clínicas dentales) que reemplazas con doble clic.
+
+[Descargar solo la plantilla](https://github.com/saas-factory-community/sfmap/releases/download/v0.3.0/Mapa-de-Claridad.sfmap) · [Cómo utilizarla](templates/mapa-de-claridad/README.md)
+
 ### Tu negocio, de punta a punta
 
 La [plantilla incluida](templates/tu-negocio) reúne cliente, oferta, producto, canales y recorrido de entrega. Tiene **200 elementos nativos editables**. Completa primero **A quién**, **Qué cambio** y **Cómo lo entregas**; después elige un canal de adquisición.
 
-[Descargar solo la plantilla](https://github.com/saas-factory-community/sfmap/releases/download/v0.2.0/Tu-negocio.sfmap) · [Cómo utilizarla](templates/tu-negocio/README.md)
+[Descargar solo la plantilla](https://github.com/saas-factory-community/sfmap/releases/download/v0.3.0/Tu-negocio.sfmap) · [Cómo utilizarla](templates/tu-negocio/README.md)
 
 ## Controles esenciales
 
@@ -68,6 +76,7 @@ El resultado queda en `dist/sfmap.app`. Sin `--no-install`, el script instala en
 ## Más información
 
 - [Instalación, respaldo y solución de problemas](docs/instalacion.md)
+- [Guion del video tutorial](docs/guion-video.md) · [Notarización pendiente](docs/notarizacion.md)
 - [Formato portátil y comandos](docs/portabilidad.md)
 - [Nube e integraciones opcionales](docs/integraciones.md)
 - [Cambios de la versión](CHANGELOG.md)

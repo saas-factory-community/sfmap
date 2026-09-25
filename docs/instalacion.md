@@ -1,40 +1,92 @@
-# Instalar y abrir tu primera plantilla
+# Instala sfmap y abre tu Mapa de Claridad
 
-## Descarga para miembros
+Guía para cualquier persona, sin conocimientos técnicos. Tiempo: unos 5 minutos.
 
-1. Abre la [versión 0.2.0](https://github.com/saas-factory-community/sfmap/releases/tag/v0.2.0).
-2. Descarga `sfmap-0.2.0-macOS-arm64.zip`. Incluye la aplicación, la plantilla y esta guía.
-3. Descomprime y mueve `sfmap.app` a Aplicaciones. Requiere **Mac con Apple Silicon y macOS 15+**. Este binario no sirve para Windows ni para Mac Intel.
-4. Abre sfmap, pulsa el engrane y selecciona **Importar .sfmap…**.
-5. Elige `Tu-negocio.sfmap`. Aparecerá un lienzo nuevo en tu biblioteca local.
+**Necesitas:** una Mac con chip Apple (M1, M2, M3, M4 o posterior) y macOS 15 Sequoia o más reciente.
+No necesitas cuenta, contraseña de nadie, Supabase ni claves de API. Tu mapa vive en tu Mac.
 
-No necesitas Supabase, claves de API, una cuenta ni tener instalado el repositorio.
+> ¿No sabes qué Mac tienes? Menú  → **Acerca de esta Mac**. Si dice «Chip Apple M…» y «macOS 15» o superior, adelante.
+> Si dice «Intel», esta versión todavía no funciona en tu equipo.
 
-## Aviso de macOS
+## 1. Descarga
 
-Esta es una **distribución de evaluación**, firmada con un certificado local. Aún no está notarizada ni firmada con Developer ID de Apple. Eso puede generar un aviso de desarrollador no verificado.
+1. Abre la [versión 0.3.0](https://github.com/saas-factory-community/sfmap/releases/tag/v0.3.0).
+2. En **Assets**, haz clic en `sfmap-0.3.0-macOS-arm64.zip`. Se guarda en tu carpeta **Descargas**.
+3. Abre **Descargas** y haz doble clic en el zip. Aparece la carpeta `sfmap-0.3.0` con:
+   - `sfmap.app`, la aplicación;
+   - `Plantillas/Mapa-de-Claridad.sfmap`, tu mapa del programa;
+   - `Plantillas/Tu-negocio.sfmap`, una plantilla adicional;
+   - esta guía.
 
-Si confías en el origen de la descarga y macOS ofrece **Abrir de todos modos** en Ajustes del Sistema → Privacidad y seguridad, puedes autorizar esa aplicación concreta. No desactives Gatekeeper globalmente. Si no deseas autorizarla, utiliza la opción de compilar desde el código descrita en el README.
+## 2. Instala
 
-## Tu trabajo
+Arrastra `sfmap.app` a la carpeta **Aplicaciones** (en la barra lateral de Finder).
 
-- Se guarda automáticamente en `~/Library/Application Support/sfmap/Biblioteca`.
-- Las imágenes pegadas quedan en `~/Library/Application Support/sfmap/Imagenes`.
-- Para hacer respaldo, cierra la app y copia esas dos carpetas juntas.
-- Para enviar un mapa: engrane → **Descargar lienzo…**. Las imágenes viajan dentro del archivo.
-- Para crear una plantilla: engrane → **Descargar plantilla…**. También es editable.
-- Importar siempre crea una página nueva. Importar dos veces produce dos copias.
+## 3. Ábrela la primera vez (el aviso de macOS)
 
-## Si algo no aparece
+sfmap está firmada, pero todavía **no está notarizada por Apple**. Por eso la primera vez macOS la frena.
+Es normal y se resuelve una sola vez:
 
-**No veo el mapa:** pulsa ⇧1 para encuadrar. **No quiero abrir documentos al pulsar:** deja desactivada esa opción en el engrane. **No encuentro una herramienta:** ⌘/ muestra todos los atajos.
+1. Abre **Aplicaciones** y haz doble clic en **sfmap**. Aparece un aviso que dice que no se pudo verificar.
+   Pulsa **Aceptar** (o **Listo**). No la muevas a la papelera.
+2. Abre **Ajustes del Sistema** → **Privacidad y seguridad**.
+3. Baja hasta la sección **Seguridad**. Verás «Se bloqueó el uso de "sfmap"…». Pulsa **Abrir de todos modos**.
+4. Escribe la contraseña de tu Mac (o usa Touch ID) y confirma **Abrir de todos modos** otra vez.
 
-**Error al importar:** utiliza un `.sfmap` exportado con esta versión. No cambies la extensión de un PNG o un JSON cualquiera. El formato no acepta HTML ni widgets conectados y tiene un límite de 128 MB.
+Listo: desde ahora sfmap abre normal, con doble clic o desde Spotlight (⌘ espacio → «sfmap»).
 
-**Error de nube después de configurar Supabase:** la app conserva el error; no cambia silenciosamente a una biblioteca vacía. Para abrir la biblioteca local explícitamente, ejecuta desde Terminal:
+**No desactives Gatekeeper ni la seguridad de tu Mac.** Solo autorizas esta aplicación concreta.
+
+### Si macOS dice «sfmap está dañado y no se puede abrir»
+
+A veces pasa con apps descargadas que aún no están notarizadas. Solo si descargaste el zip desde el enlace
+oficial de arriba, abre la app **Terminal** (⌘ espacio → «Terminal»), pega esta línea y pulsa Intro:
 
 ```bash
-/Applications/sfmap.app/Contents/MacOS/sfmap --local
+xattr -dr com.apple.quarantine /Applications/sfmap.app
 ```
 
-Puedes compartir el mensaje de error en un issue, ocultando tus claves y contenido privado.
+Quita la marca de «descargado de internet» únicamente de sfmap. Después vuelve a abrirla con doble clic.
+
+## 4. Abre tu Mapa de Claridad
+
+1. En sfmap, pulsa el **engrane** (abajo) y elige **Importar .sfmap…**.
+2. Busca `Mapa-de-Claridad.sfmap` (en `Descargas/sfmap-0.3.0/Plantillas`) y ábrelo.
+3. Aparece un lienzo nuevo: **Mapa de Claridad · Arbrain**. Es tuyo; el archivo original no cambia.
+
+También puedes hacer doble clic en el archivo `.sfmap` desde Finder.
+
+## 5. Úsalo
+
+| Quiero… | Hago… |
+| --- | --- |
+| Ver todo el mapa | ⇧1 |
+| Acercarme o alejarme | ⌘ + rueda del ratón, o pellizco en el trackpad |
+| Moverme | Rueda / dos dedos |
+| Cambiar un texto | Doble clic sobre él |
+| Deshacer | ⌘Z |
+| Ver todos los atajos | ⌘/ |
+
+**Cómo se llena:** lo escrito en **violeta** es el ejemplo ficticio de Ana (clínicas dentales).
+Haz doble clic y reemplázalo por lo tuyo. Lo que dice «Escribe aquí…» espera tu respuesta.
+Borde **punteado** = por construir; **sólido** = ya existe. Cambia el borde cuando lances algo.
+
+Se guarda solo, en tu Mac: `~/Library/Application Support/sfmap/Biblioteca`.
+
+## 6. Comparte o respalda
+
+- **Enviar tu mapa** a tu consultor: engrane → **Descargar lienzo…**. Las imágenes viajan dentro del archivo.
+- **Respaldo:** cierra sfmap y copia juntas las carpetas `Biblioteca` e `Imagenes` de
+  `~/Library/Application Support/sfmap/`.
+- Importar dos veces crea dos copias; no se sobrescribe nada.
+
+## Si algo falla
+
+- **No veo el mapa:** pulsa ⇧1.
+- **Error al importar:** usa un `.sfmap` descargado de la release; no cambies extensiones de archivos.
+- **La app no abre tras el paso 3:** revisa que tu Mac sea Apple Silicon con macOS 15 o superior.
+- **Configuraste una nube y falla:** la app muestra el error; no cambia sola a otra biblioteca.
+  Para abrir la biblioteca local: `/Applications/sfmap.app/Contents/MacOS/sfmap --local` en Terminal.
+- **Otra cosa:** escribe en el canal del programa con una captura del mensaje. Nunca compartas contraseñas.
+
+¿Prefieres compilarla tú? Consulta «Compilar desde el código» en el [README](../README.md).

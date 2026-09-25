@@ -1,5 +1,17 @@
 # Cambios
 
+## 0.3.0 · 25 septiembre 2026
+
+- Plantilla **Mapa de Claridad · Arbrain**: el entregable de F0 (tu mapa) y F1 (tu oferta en una página)
+  del programa. Siete piezas con ejemplo ficticio editable, hoja de oferta que se arma con las piezas y
+  recorrido de 90 días a escala. Ilustraciones propias embebidas; legible en tema claro y oscuro.
+- Guía de instalación reescrita para personas no técnicas, con el paso «Abrir de todos modos» de macOS 15.
+- Guion de video tutorial (`docs/guion-video.md`) y pasos de notarización pendientes (`docs/notarizacion.md`).
+- `scripts/release.sh`: zip de app + plantillas + guía, plantillas sueltas y `SHA256SUMS`.
+- Prueba de que la plantilla incluida abre sin recursos externos y hace ida y vuelta sin alterar el documento.
+- Sin cambios de código del editor: las correcciones del desarrollo privado ya estaban en 0.2.0.
+
+
 ## 0.2.0 · 22 septiembre 2026 · evaluación
 
 - Biblioteca local sin cuenta ni backend, con páginas, carpetas y guardado por versión.

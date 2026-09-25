@@ -28,4 +28,26 @@ final class ConfiguracionPublicaTests: XCTestCase {
             XCTAssertNotNil(try ArchivoSFMap.imagenEmbebida(element["src"]!.s!))
         }
     }
+    /// La plantilla del programa: abre sola, no nombra nada privado y hace ida y vuelta sin cambios.
+    func testMapaDeClaridadAbreYHaceIdaYVuelta() async throws {
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let file = repo.appendingPathComponent("templates/mapa-de-claridad/Mapa-de-Claridad.sfmap")
+        let data = try Data(contentsOf: file)
+        let c = try ArchivoSFMap.leer(data)
+        XCTAssertTrue(c.plantilla)
+        XCTAssertEqual(c.nombre, "Mapa de Claridad · Arbrain")
+        XCTAssertGreaterThan(c.documento["elements"]?.arr?.count ?? 0, 400)
+        XCTAssertEqual(c.enlacesOmitidos, 0)
+        for element in c.documento["elements"]!.arr! where element["type"]?.s == "image" {
+            XCTAssertNotNil(try ArchivoSFMap.imagenEmbebida(element["src"]!.s!))
+        }
+        let texto = String(decoding: data, as: UTF8.self)
+            .replacingOccurrences(of: #"data:image/[a-z]+;base64,[A-Za-z0-9+/=]+"#, with: "", options: .regularExpression)
+        XCTAssertNil(texto.range(of: #"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"#, options: .regularExpression))
+        for privado in ["/Users/", "supabase", ".env", "agent-server"] { XCTAssertFalse(texto.contains(privado), privado) }
+        let (otra, omitidos) = try await ArchivoSFMap.preparar(nombre: c.nombre, documento: c.documento, plantilla: true)
+        XCTAssertEqual(omitidos, 0)
+        XCTAssertEqual(try ArchivoSFMap.leer(otra).documento, c.documento)
+    }
 }
