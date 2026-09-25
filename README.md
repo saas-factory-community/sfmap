@@ -10,7 +10,7 @@ Un lienzo nativo para macOS: piensa, dibuja y organiza tu negocio con texto, im�
 
 1. **[Descarga sfmap 0.3.0 para Mac con Apple Silicon](https://github.com/saas-factory-community/sfmap/releases/tag/v0.3.0)** (`sfmap-0.3.0-macOS-arm64.zip`). Requiere macOS 15 o posterior.
 2. Descomprime el paquete y arrastra `sfmap.app` a **Aplicaciones**.
-3. Abre la app (la primera vez, macOS pide **Abrir de todos modos**: la [guía](docs/instalacion.md) lo explica paso a paso). En el engrane, elige **Importar .sfmap…** y selecciona `Plantillas/Mapa-de-Claridad.sfmap`.
+3. Abre la app (la primera vez, macOS pide **Abrir de todos modos**: la [guía](docs/instalacion.md) lo explica paso a paso). Tu **Mapa de Claridad** aparece abierto en el primer arranque; para otra copia, engrane → **Importar .sfmap…** → `Plantillas/Mapa-de-Claridad.sfmap`.
 4. Acércate con **⌘ + rueda**, edita un texto con **doble clic** y haz tuyo el mapa.
 
 **Versión de evaluación:** el binario tiene firma local, pero todavía no tiene Developer ID ni notarización de Apple. macOS puede mostrar una advertencia o bloquear la primera apertura. Consulta la [guía de instalación](docs/instalacion.md), que también incluye la opción de compilar desde el código.

@@ -1346,6 +1346,8 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func cargarLista() async {
+        // Primer arranque sin cuenta: el Mapa de Claridad ya está abierto.
+        let sembrada = await Nube.sembrarPlantillaInicial()
         do {
             let (ps, cs) = try await Nube.paginas()
             let destino = await MainActor.run { () -> String? in
@@ -1364,7 +1366,8 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     self.centrarPendiente = a[i + 1]
                 }
                 let pedida = a.dropFirst().first { $0.count > 20 && !$0.hasPrefix("-") }
-                let destino = ps.first { $0.id == pedida } ?? ps.first { $0.id == recordada } ?? ps.first
+                let destino = ps.first { $0.id == pedida } ?? ps.first { $0.id == sembrada?.id }
+                    ?? ps.first { $0.id == recordada } ?? ps.first
                 /*
                  * LA PORTADA AL ARRANCAR (11 sep 2026). Sin lienzo pedido por
                  * argumentos, la app abre con el panel en la portada de
@@ -1372,7 +1375,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                  * su espacio. Con uno pedido (Levy: `open -a sfmap --args
                  * <pageId>`) va directo y el panel sí lo sigue.
                  */
-                self.seguirEspacio = destino != nil && destino?.id == pedida
+                self.seguirEspacio = destino != nil && (destino?.id == pedida || destino?.id == sembrada?.id)
                 if !self.seguirEspacio {
                     self.lateral.espacio = nil
                     if !self.lateralAbierta { self.alternarLateral() }
@@ -1380,6 +1383,7 @@ final class Delegado: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return destino?.id
             }
             if let destino { await abrir(destino) }
+            if sembrada != nil { await MainActor.run { self.lienzo.encuadrar() } }
         } catch {
             decir("⚠︎ \(error.localizedDescription)", error: true)
         }

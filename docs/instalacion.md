@@ -48,13 +48,14 @@ xattr -dr com.apple.quarantine /Applications/sfmap.app
 
 Quita la marca de «descargado de internet» únicamente de sfmap. Después vuelve a abrirla con doble clic.
 
-## 4. Abre tu Mapa de Claridad
+## 4. Tu Mapa de Claridad ya está abierto
 
-1. En sfmap, pulsa el **engrane** (abajo) y elige **Importar .sfmap…**.
-2. Busca `Mapa-de-Claridad.sfmap` (en `Descargas/sfmap-0.3.0/Plantillas`) y ábrelo.
-3. Aparece un lienzo nuevo: **Mapa de Claridad · Arbrain**. Es tuyo; el archivo original no cambia.
+La primera vez que abres sfmap, tu **Mapa de Claridad · Arbrain** aparece solo, encuadrado y listo para
+llenar. Es tuyo y vive en tu Mac.
 
-También puedes hacer doble clic en el archivo `.sfmap` desde Finder.
+¿Lo borraste o quieres una copia limpia? Engrane (abajo) → **Importar .sfmap…** →
+`Descargas/sfmap-0.3.0/Plantillas/Mapa-de-Claridad.sfmap`. También sirve doble clic en el archivo desde Finder.
+Importar siempre crea una copia nueva; no toca la que ya llenaste.
 
 ## 5. Úsalo
 

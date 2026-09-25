@@ -35,6 +35,9 @@ cp assets/icon.icns "$APP/Contents/Resources/icon.icns"
 # Las fuentes viajan DENTRO: una app que depende de un checkout del repo no es
 # una app. Son las mismas .ttf que mide el compilador, no unas parecidas.
 cp -R Resources/fuentes "$APP/Contents/Resources/fuentes"
+# La plantilla del primer arranque: una biblioteca nueva abre el Mapa de Claridad.
+mkdir -p "$APP/Contents/Resources/plantillas"
+cp templates/mapa-de-claridad/Mapa-de-Claridad.sfmap "$APP/Contents/Resources/plantillas/"
 
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>

@@ -96,6 +96,26 @@ enum ArchivoSFMap {
 }
 
 extension Nube {
+    /// La plantilla que viaja dentro de la app (`Contents/Resources/plantillas`).
+    /// `SFMAP_PLANTILLA_INICIAL` la sustituye en pruebas; vacía la desactiva.
+    static var plantillaIncluida: URL? {
+        if let r = ProcessInfo.processInfo.environment["SFMAP_PLANTILLA_INICIAL"] {
+            return r.isEmpty ? nil : URL(fileURLWithPath: r)
+        }
+        return Bundle.main.resourceURL?.appendingPathComponent("plantillas/Mapa-de-Claridad.sfmap")
+    }
+    /// Sólo en biblioteca local y nueva. Un fallo no impide abrir la app: se deja traza.
+    static func sembrarPlantillaInicial(_ url: URL? = plantillaIncluida) async -> ResumenPagina? {
+        guard let local, !soloLectura, let url, FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let c = try ArchivoSFMap.leer(Data(contentsOf: url))
+            let p = try await local.sembrar(c)
+            if let p { traza("plantilla inicial: \(p.nombre)") }
+            return p
+        } catch {
+            traza("plantilla inicial: \(error.localizedDescription)"); return nil
+        }
+    }
     static func importar(_ c:ArchivoSFMap.Contenido, carpeta:String? = nil) async throws -> ResumenPagina {
         guard !soloLectura else { throw Err.http("Modo solo lectura") }
         if let local { return try await local.crear(nombre:c.nombre,carpeta:carpeta,documento:c.documento) }

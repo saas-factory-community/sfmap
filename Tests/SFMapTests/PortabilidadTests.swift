@@ -70,4 +70,30 @@ final class PortabilidadTests:XCTestCase {
         let j=Nube.documentoActualizado(p,previo:doc())
         XCTAssertEqual(j["futureField"],doc()["futureField"]);XCTAssertEqual(j["regions"],doc()["regions"])
     }
+    func testSembrarSoloEnBibliotecaNuevaYNoResucitaLoBorrado() async throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent("sfmap-siembra-"+UUID().uuidString)
+        let store=AlmacenLocal(raiz:root)
+        let c=ArchivoSFMap.Contenido(nombre:"Mapa",documento:doc(),plantilla:true,enlacesOmitidos:0)
+        let p=try await store.sembrar(c)
+        XCTAssertNotNil(p)
+        let otra=try await store.sembrar(c);XCTAssertNil(otra)
+        try await store.editarPagina(p!.id,campos:["is_deleted":.bool(true)])
+        let tras=try await store.sembrar(c);XCTAssertNil(tras)
+        let ps=try await store.listar().0;XCTAssertTrue(ps.isEmpty)
+    }
+    func testPlantillaIncluidaHaceRoundtripSinCambiosNiRastrosPrivados() async throws {
+        let raiz=URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let url=raiz.appendingPathComponent("templates/mapa-de-claridad/Mapa-de-Claridad.sfmap")
+        let bruto=try Data(contentsOf:url)
+        let c=try ArchivoSFMap.leer(bruto)
+        XCTAssertEqual(c.nombre,"Mapa de Claridad · Arbrain");XCTAssertTrue(c.plantilla)
+        XCTAssertGreaterThan(c.documento["elements"]?.arr?.count ?? 0,300)
+        let (data,n)=try await ArchivoSFMap.preparar(nombre:c.nombre,documento:c.documento,plantilla:true)
+        XCTAssertEqual(n,0)
+        XCTAssertEqual(try ArchivoSFMap.leer(data).documento,c.documento)
+        let texto=String(decoding:bruto,as:UTF8.self)
+        for prohibido in ["supabase","agent-server","danielcarreon","/Users/","MC_USER_ID","doc:"] {
+            XCTAssertFalse(texto.contains(prohibido),prohibido)
+        }
+    }
 }

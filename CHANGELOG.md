@@ -5,6 +5,8 @@
 - Plantilla **Mapa de Claridad · Arbrain**: el entregable de F0 (tu mapa) y F1 (tu oferta en una página)
   del programa. Siete piezas con ejemplo ficticio editable, hoja de oferta que se arma con las piezas y
   recorrido de 90 días a escala. Ilustraciones propias embebidas; legible en tema claro y oscuro.
+- Primer arranque: una biblioteca local nueva abre el Mapa de Claridad ya encuadrado, sin importar nada.
+  Si la persona lo borra, no reaparece.
 - Guía de instalación reescrita para personas no técnicas, con el paso «Abrir de todos modos» de macOS 15.
 - Guion de video tutorial (`docs/guion-video.md`) y pasos de notarización pendientes (`docs/notarizacion.md`).
 - `scripts/release.sh`: zip de app + plantillas + guía, plantillas sueltas y `SHA256SUMS`.

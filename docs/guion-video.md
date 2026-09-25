@@ -47,10 +47,10 @@ segundos.»
 
 ## 2:10 · Abrir tu mapa (30 s)
 
-[Engrane → Importar .sfmap… → Mapa-de-Claridad.sfmap → aparece el lienzo.]
+[La app abre y el Mapa de Claridad ya está en pantalla, encuadrado.]
 
-«Dentro de sfmap: engrane, Importar, y eliges Mapa de Claridad. Aparece tu copia. Es tuya: vive en tu Mac
-y el archivo original no cambia.»
+«Y mira: la primera vez que abres sfmap, tu Mapa de Claridad ya está aquí. Es tuyo: vive en tu Mac.
+Si algún día quieres una copia limpia, engrane, Importar, y eliges el archivo de la carpeta Plantillas.»
 
 ## 2:40 · Cómo se lee (50 s)
 

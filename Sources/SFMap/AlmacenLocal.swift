@@ -31,6 +31,12 @@ actor AlmacenLocal {
             return Carpeta(id:id, nombre:c["nombre"]?.s ?? "Carpeta", madre:c["madre"]?.s)
         })
     }
+    /// Primer arranque: sólo una biblioteca que NUNCA tuvo índice recibe la plantilla incluida.
+    /// Si la persona borra ese lienzo después, no reaparece: el índice ya existe.
+    func sembrar(_ c: ArchivoSFMap.Contenido) throws -> ResumenPagina? {
+        guard !FileManager.default.fileExists(atPath: indiceURL.path) else { return nil }
+        return try crear(nombre: c.nombre, carpeta: nil, documento: c.documento)
+    }
     func abrir(_ id: String) throws -> Nube.Pagina {
         let j = try JSONDecoder().decode(Json.self, from: Data(contentsOf: paginaURL(id)))
         let d = j["documento"] ?? .objeto([:])
